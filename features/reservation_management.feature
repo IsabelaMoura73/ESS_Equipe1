@@ -63,6 +63,22 @@ Feature: Reserva e manutenção de reservas
         Then o sistema me redireciona para a página de login
         And eu vejo a mensagem "Você deve estar logado para fazer uma reserva"
 
+    Scenario: Exportar reserva para Google Calendar
+        Given eu estou na página "Minhas Reservas" logado como usuário autenticado
+        And eu possuo uma reserva confirmada da "Sala F" no dia 25/06/2025 das 10h às 12h
+        When eu clico em "Exportar para Google Calendar"
+        Then a reserva é exportada para o meu Google Calendar
+        And eu vejo a mensagem "Reserva adicionada ao seu Google Calendar com sucesso"
+
+    Scenario: Editar uma reserva existente
+        Given eu estou na página "Minhas Reservas" logado como usuário autenticado
+        And eu possuo uma reserva ativa da "Sala G" no dia 26/06/2025 das 14h às 16h
+        When eu clico em "Editar" na reserva da "Sala G"
+        And eu altero o horário de fim para "18:00"
+        Then a reserva é atualizada com o novo horário
+        And o sistema verifica a disponibilidade antes de confirmar a edição
+        And eu vejo a mensagem "Horário alterado com sucesso!"
+
 
 
    
