@@ -19,3 +19,11 @@ Scenario: Falha ao criar solicitação para sala com manutenção pendente
   And o professor informa "Ar-condicionado com defeito" no campo "Descrição"
   Then o sistema não registra a solicitação
   And o sistema retorna mensagem de erro "Já existe uma solicitação pendente para esta sala"
+
+Scenario: Falha ao criar solicitação com campo obrigatório vazio
+
+  Given o professor autenticado acessa o formulário de nova solicitação
+  When o professor informa "Grad 2" no campo "Nome da sala"
+  And o professor submete o formulário sem preencher o campo "Descrição"
+  Then o sistema não registra a solicitação
+  And o sistema exibe a mensagem de erro "O campo Descrição é obrigatório"
