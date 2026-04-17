@@ -27,3 +27,15 @@ Feature: Lab equipment reservation
     And I click on "Confirm"
     Then I see the error message "Room under maintenance. Reservation not allowed"
     And no reservation is created
+
+  Scenario: Attempt to create a reservation with a time conflict for the same student
+    Given I am logged into the system as student "Vitoria"
+    And I already have a reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
+    And I am on the "New Reservation" page
+    When I fill in the room name with "Lab A"
+    And I fill in the number of computers with "1"
+    And I fill in the start time with "10/04/2026 09:00"
+    And I fill in the end time with "10/04/2026 11:00"
+    And I click on "Confirm"
+    Then I see the error message "You already have a reservation at this time"
+    And no reservation is created
