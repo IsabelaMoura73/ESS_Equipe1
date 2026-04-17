@@ -87,9 +87,9 @@ Feature: Reserva e manutenção de reservas
 
     Scenario: Visualizar detalhes de uma reserva
         Given eu estou na página "Minhas Reservas" logado como usuário autenticado
-        When eu clico em uma reserva da lista
-        Then os detalhes completos da reserva são exibidos
-        And inclui informações sobre a sala, datas, horários e status
+        When eu clico em uma reserva da lista para visualizar os detalhes
+        Then os detalhes completos da reserva são exibidos em uma modal
+        And inclui informações sobre a sala, datas, horários, status e quem fez a reserva
 
 
    
