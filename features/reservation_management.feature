@@ -55,6 +55,12 @@ Feature: Reserva e manutenção de reservas
         Then o sistema exibe a mensagem "Sala não disponível para o período selecionado"
         And nenhuma reserva é criada
 
+    Scenario: Tentar reservar sem estar logado
+        Given eu não estou logado no sistema
+        When eu tento acessar a página "Nova Reserva"
+        Then o sistema me redireciona para a página de login
+        And eu vejo a mensagem "Você deve estar logado para fazer uma reserva"
+
 
 
    
