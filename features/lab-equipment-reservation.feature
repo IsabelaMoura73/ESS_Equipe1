@@ -40,7 +40,7 @@ Feature: Lab equipment reservation
     Then I see the error message "You already have a reservation at this time"
     And no reservation is created
 
-  Scenario: Cancel a pending reservation
+Scenario: Cancel a pending reservation
     Given I am logged into the system as student "Vitoria"
     And I have a reservation for room "Lab A" with status "Pending"
     And I am on the reservation details page
@@ -49,12 +49,13 @@ Feature: Lab equipment reservation
     And the reservation no longer appears in my active reservations list
 
   Scenario: Successful reservation creation service scenario
-    Given the student with login "Vitoria" has no reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
-    And the room "Lab A" is not under maintenance
+    Given the student with login "Vitoria" has no active reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
+    And the room "Lab A" is available and not under maintenance
     When the system receives a reservation request with room "Lab A", number of computers "3", start time "10/04/2026 08:00", and end time "10/04/2026 10:00" for the student with login "Vitoria"
     Then the system registers the reservation with status "Pending"
     And the reservation is associated with the student with login "Vitoria"
     And the stored data are room "Lab A", 3 computers, start time "10/04/2026 08:00", and end time "10/04/2026 10:00"
+    And the reservation appears in the student's reservation list
 
   Scenario: Block reservation in a room under maintenance
     Given the student with login "Vitoria" has no reservation from "10/04/2026 14:00" to "10/04/2026 16:00"
