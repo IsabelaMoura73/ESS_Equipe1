@@ -39,3 +39,11 @@ Feature: Lab equipment reservation
     And I click on "Confirm"
     Then I see the error message "You already have a reservation at this time"
     And no reservation is created
+
+  Scenario: Cancel a pending reservation
+    Given I am logged into the system as student "Vitoria"
+    And I have a reservation for room "Lab A" with status "Pending"
+    And I am on the reservation details page
+    When I click on "Cancel"
+    Then the reservation is canceled successfully
+    And the reservation no longer appears in my active reservations list
