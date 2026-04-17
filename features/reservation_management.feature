@@ -75,8 +75,8 @@ Feature: Reserva e manutenção de reservas
         And eu possuo uma reserva ativa da "Sala G" no dia 26/06/2025 das 14h às 16h
         When eu clico em "Editar" na reserva da "Sala G"
         And eu altero o horário de fim para "18:00"
-        Then a reserva é atualizada com o novo horário
         And o sistema verifica a disponibilidade antes de confirmar a edição
+        Then a reserva é atualizada com o novo horário
         And eu vejo a mensagem "Horário alterado com sucesso!"
 
 
