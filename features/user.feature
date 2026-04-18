@@ -30,4 +30,4 @@ When eu clico na opção “Desativar conta”
 And eu confirmo a desativação
 Then eu vejo a mensagem “Conta desativada com sucesso!”
 And a conta do usuário está com status “Desativada”
-And todas as reservas do usuário com status “Confirmada” e “Pendente” são alteradas para “Cancelada”
+And todas as reservas do usuário com status “Confirmada” e “Pendente” são excluídas
