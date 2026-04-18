@@ -59,8 +59,21 @@ Scenario: Cancel a pending reservation
 
   Scenario: Block reservation in a room under maintenance
     Given the student with login "Vitoria" has no reservation from "10/04/2026 14:00" to "10/04/2026 16:00"
-    And the room "Lab B" is under active maintenance
+    And the room "Lab B" is currently under active maintenance
     When the system receives a reservation request with room "Lab B", number of computers "2", start time "10/04/2026 14:00", and end time "10/04/2026 16:00" for the student with login "Vitoria"
     Then the system does not register any reservation
     And the system returns the error "The room 'Lab B' is under maintenance and cannot be reserved"
     And no reservation is associated with the student with login "Vitoria"
+
+  Scenario: Equipment pickup confirmation
+    Given the student has a pending reservation for room "Lab A"
+    When the student confirms the equipment pickup
+    Then the reservation status becomes "In Use"
+
+  Scenario: Reservation request with invalid number of computers
+    Given the student with login "Vitoria" is on the "New Reservation" page
+    And the room "Lab A" is available and not under maintenance
+    When the student enters number of computers "0"
+    And the student submits the reservation for room "Lab A" from "10/04/2026 08:00" to "10/04/2026 10:00"
+    Then the system displays the error message "Number of computers must be greater than zero"
+    And no reservation is created
