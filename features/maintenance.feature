@@ -46,3 +46,4 @@ Scenario: Editar descrição de solicitação com status pendente
   And o professor submete a edição
   Then o sistema atualiza a descrição para "Ar-condicionado barulhento e com defeito"
   And o sistema retorna confirmação de edição
+  And (adicionando mudanças)
