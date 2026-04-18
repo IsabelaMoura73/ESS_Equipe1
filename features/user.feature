@@ -31,3 +31,19 @@ And eu confirmo a desativação
 Then eu vejo a mensagem “Conta desativada com sucesso!”
 And a conta do usuário está com status “Desativada”
 And todas as reservas do usuário com status “Confirmada” e “Pendente” são excluídas
+
+Scenario: Login realizado com sucesso
+Given existe um usuário cadastrado com CPF "12345678900"
+And a senha é "senha123"
+When eu informo CPF "12345678900" e senha "senha123"
+And eu clico em “Entrar”
+Then eu sou autenticado no sistema
+
+Scenario: Erro ao alterar dados com senha incorreta
+Given eu estou autenticado como o usuário “Kauanny Barros”
+When eu clico no botão "Editar"
+And eu altero o campo "Nome" para "Kauanny K. Barros"
+And eu preencho o campo “Senha” com “senhaErrada”
+And eu clico no botão “Salvar alterações”
+Then eu vejo a mensagem “Senha incorreta.”
+And os dados não são alterados
