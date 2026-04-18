@@ -50,3 +50,25 @@ And eu preencho o campo “Senha” com “senhaErrada”
 And eu clico no botão “Salvar alterações”
 Then eu vejo a mensagem “Senha incorreta.”
 And os dados não são alterados
+
+Scenario: Tentativa de cadastro com CPF já existente
+Given eu estou na página "Cadastro de Usuário"
+And o CPF "123.456.789-00" já está cadastrado no sistema
+When eu preencho "Nome" com "Kauanny Barros"
+And eu preencho "CPF" com "123.456.789-00"
+And eu seleciono "Discente" como tipo de vínculo
+And eu preencho "Curso" com "Engenharia da Computação"
+And eu preencho "Matrícula" com "2023005678"
+And eu preencho "Senha" com "senha123"
+And eu clico no botão "Confirmar"
+Then eu vejo a mensagem "CPF já cadastrado no sistema."
+And nenhum novo usuário é criado no sistema
+
+Scenario: Erro de login com CPF não cadastrado
+Given não existe usuário cadastrado com CPF "111.111.111-11"
+When eu acesso a página "Login"
+And eu preencho "CPF" com "111.111.111-11"
+And eu preencho "Senha" com "senha123"
+And eu clico em "Entrar"
+Then eu vejo a mensagem "CPF ou senha incorretos."
+And eu permaneço na página "Login"
