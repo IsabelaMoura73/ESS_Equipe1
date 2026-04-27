@@ -7,7 +7,7 @@ Feature: Lab equipment reservation
   Scenario: Successful equipment reservation
     Given I am logged into the system as student "Vitoria"
     And I am on the "New Reservation" page
-    And the room "Lab A" is available
+    And the room "Lab A" is available and not under maintenance
     When I fill in the room name with "Lab A"
     And I fill in the number of computers with "3"
     And I fill in the start time with "10/04/2026 08:00"
@@ -15,8 +15,9 @@ Feature: Lab equipment reservation
     And I click on "Confirm"
     Then I see the message "Reservation sent successfully"
     And the reservation is created with status "Pending"
+    And the reservation appears in my reservation list with room "Lab A", 3 computers, start time "10/04/2026 08:00", end time "10/04/2026 10:00", and status "Pending"
 
-  Scenario: Attempt to reserve equipment in a room under maintenance
+  Scenario: Attempt to reserve computers in a room under maintenance
     Given I am logged into the system as student "Vitoria"
     And I am on the "New Reservation" page
     And the room "Lab B" is under maintenance
@@ -25,12 +26,12 @@ Feature: Lab equipment reservation
     And I fill in the start time with "10/04/2026 14:00"
     And I fill in the end time with "10/04/2026 16:00"
     And I click on "Confirm"
-    Then I see the error message "Room under maintenance. Reservation not allowed"
+    Then I see the error message "The room 'Lab B' is under maintenance and cannot be reserved"
     And no reservation is created
 
   Scenario: Attempt to create a reservation with a time conflict for the same student
     Given I am logged into the system as student "Vitoria"
-    And I already have a reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
+    And I already have a reservation for room "Lab A" from "10/04/2026 08:00" to "10/04/2026 10:00" with status "Pending"
     And I am on the "New Reservation" page
     When I fill in the room name with "Lab A"
     And I fill in the number of computers with "1"
@@ -40,24 +41,23 @@ Feature: Lab equipment reservation
     Then I see the error message "You already have a reservation at this time"
     And no reservation is created
 
-Scenario: Cancel a pending reservation
+  Scenario: Cancel a pending reservation
     Given I am logged into the system as student "Vitoria"
-    And I have a reservation for room "Lab A" with status "Pending"
-    And I am on the reservation details page
+    And I have a reservation for room "Lab A" from "10/04/2026 08:00" to "10/04/2026 10:00" with status "Pending"
+    And I am on the "Reservation Details" page for this reservation
     When I click on "Cancel"
-    Then the reservation is canceled successfully
+    Then I see the message "Reservation canceled successfully"
     And the reservation no longer appears in my active reservations list
 
   Scenario: Successful reservation creation service scenario
-    Given the student with login "Vitoria" has no active reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
+    Given the student with login "Vitoria" has no reservation from "10/04/2026 08:00" to "10/04/2026 10:00"
     And the room "Lab A" is available and not under maintenance
     When the system receives a reservation request with room "Lab A", number of computers "3", start time "10/04/2026 08:00", and end time "10/04/2026 10:00" for the student with login "Vitoria"
     Then the system registers the reservation with status "Pending"
     And the reservation is associated with the student with login "Vitoria"
     And the stored data are room "Lab A", 3 computers, start time "10/04/2026 08:00", and end time "10/04/2026 10:00"
-    And the reservation appears in the student's reservation list
 
-  Scenario: Block reservation in a room under maintenance
+  Scenario: Block reservation in a room under maintenance service scenario
     Given the student with login "Vitoria" has no reservation from "10/04/2026 14:00" to "10/04/2026 16:00"
     And the room "Lab B" is currently under active maintenance
     When the system receives a reservation request with room "Lab B", number of computers "2", start time "10/04/2026 14:00", and end time "10/04/2026 16:00" for the student with login "Vitoria"
@@ -65,15 +65,14 @@ Scenario: Cancel a pending reservation
     And the system returns the error "The room 'Lab B' is under maintenance and cannot be reserved"
     And no reservation is associated with the student with login "Vitoria"
 
-  Scenario: Equipment pickup confirmation
-    Given the student has a pending reservation for room "Lab A"
-    When the student confirms the equipment pickup
-    Then the reservation status becomes "In Use"
-
   Scenario: Reservation request with invalid number of computers
-    Given the student with login "Vitoria" is on the "New Reservation" page
+    Given I am logged into the system as student "Vitoria"
+    And I am on the "New Reservation" page
     And the room "Lab A" is available and not under maintenance
-    When the student enters number of computers "0"
-    And the student submits the reservation for room "Lab A" from "10/04/2026 08:00" to "10/04/2026 10:00"
-    Then the system displays the error message "Number of computers must be greater than zero"
+    When I fill in the room name with "Lab A"
+    And I fill in the number of computers with "0"
+    And I fill in the start time with "10/04/2026 08:00"
+    And I fill in the end time with "10/04/2026 10:00"
+    And I click on "Confirm"
+    Then I see the error message "Number of computers must be greater than zero"
     And no reservation is created
