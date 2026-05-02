@@ -82,46 +82,6 @@ python -m uvicorn main:app --reload
 
 ---
 
-## Estrutura do Projeto
-
-```
-ESS_Equipe1/
-├── backend/
-│   ├── main.py              # Entry point da API
-│   ├── database.py          # Conexão SQLite
-│   ├── models.py            # Tabelas (SQLAlchemy)
-│   ├── schemas.py           # Validação (Pydantic)
-│   ├── auth.py              # JWT + bcrypt
-│   ├── dependencies.py      # Guards de autenticação
-│   ├── requirements.txt
-│   └── routers/
-│       ├── users.py         # /api/users
-│       ├── rooms.py         # /api/rooms
-│       ├── reservations.py  # /api/reservations
-│       └── maintenance.py   # /api/maintenance
-├── frontend/
-│   ├── package.json
-│   └── src/
-│       ├── index.html
-│       ├── index.jsx
-│       ├── App.jsx
-│       ├── api/client.js    # Fetch wrapper
-│       ├── styles/global.css
-│       ├── components/
-│       │   └── Navbar.jsx
-│       └── pages/
-│           ├── Login.jsx
-│           ├── Register.jsx
-│           ├── Home.jsx
-│           ├── Profile.jsx
-│           └── AdminDashboard.jsx
-├── features/                # Cenários BDD (não modificar)
-└── docs/
-    └── como-executar.md     # Este arquivo
-```
-
----
-
 ## Portas utilizadas
 
 | Serviço  | Porta |
