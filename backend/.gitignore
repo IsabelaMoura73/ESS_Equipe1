@@ -4,3 +4,4 @@ __pycache__/
 salla.db
 venv/
 .venv/
+.env
