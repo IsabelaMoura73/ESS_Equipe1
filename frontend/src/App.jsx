@@ -1,66 +1,22 @@
-import React, { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Home from "./pages/Home";
-import Profile from "./pages/Profile";
-import AdminDashboard from "./pages/AdminDashboard";
-import Navbar from "./components/Navbar";
-
-function PrivateRoute({ children, user }) {
-  return user ? children : <Navigate to="/login" replace />;
-}
+import React from "react";
 
 export default function App() {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem("user");
-    return stored ? JSON.parse(stored) : null;
-  });
-
-  function onLogin(userData) {
-    setUser(userData);
-    localStorage.setItem("user", JSON.stringify(userData));
-  }
-
-  function onUpdate(userData) {
-    setUser(userData);
-    localStorage.setItem("user", JSON.stringify(userData));
-  }
-
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login onLogin={onLogin} />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/home"
-          element={
-            <PrivateRoute user={user}>
-              <Navbar user={user} />
-              <main><Home user={user} /></main>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <PrivateRoute user={user}>
-              <Navbar user={user} />
-              <main><Profile user={user} onUpdate={onUpdate} /></main>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <PrivateRoute user={user}>
-              <Navbar user={user} />
-              <main><AdminDashboard /></main>
-            </PrivateRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to={user ? "/home" : "/login"} replace />} />
-      </Routes>
-    </BrowserRouter>
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "column",
+      gap: "1rem",
+      fontFamily: "system-ui, sans-serif",
+      background: "#f5f6fa",
+      color: "#1a1a2e",
+    }}>
+      <h1 style={{ fontSize: "2rem", margin: 0 }}>Salla</h1>
+      <p style={{ fontSize: "1.1rem", color: "#666" }}>
+        Nenhuma feature criada ainda. Tudo em desenvolvimento.
+      </p>
+    </div>
   );
 }
