@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+salla.db
+venv/
+.venv/
+.env
