@@ -17,8 +17,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
-import models.reservation  # noqa: F401
+import models.reservation
 from models.reservation import Reservation, ReservationStatus
+import models.room
+from models.room import Room, RoomMaintenanceStatus
 from main import app
 
 # ── Banco em memoria ──────────────────────────────────────────────────────────
@@ -28,7 +30,6 @@ engine_test = create_engine(
     poolclass=StaticPool,
 )
 SessionTest = sessionmaker(bind=engine_test, autocommit=False, autoflush=False)
-Base.metadata.create_all(bind=engine_test)
 
 
 def override_get_db():
@@ -45,22 +46,36 @@ scenarios("features/reservation_management.feature")
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True, scope="session")
+def create_tables():
+    Base.metadata.create_all(bind=engine_test)
+    yield
+    Base.metadata.drop_all(bind=engine_test)
+
 @pytest.fixture(autouse=True)
 def clean_database():
-    # Limpa ANTES do teste para garantir banco vazio
     db = SessionTest()
     for table in reversed(Base.metadata.sorted_tables):
         db.execute(table.delete())
+    db.commit()
+
+    for nome in ["D005", "E101"]:
+        db.add(Room(
+            name=nome,
+            capacity=30,
+            description="Sala de testes",
+            computers=10,
+            maintenance_status=RoomMaintenanceStatus.no,
+            is_reserved=False,
+        ))
     db.commit()
     db.close()
     yield
-    # Limpa DEPOIS do teste
     db = SessionTest()
     for table in reversed(Base.metadata.sorted_tables):
         db.execute(table.delete())
     db.commit()
     db.close()
-
 
 @pytest.fixture(autouse=True)
 def ensure_db_override():

@@ -1,36 +1,69 @@
 import pytest
 from pytest_bdd import scenarios, given, when, then, parsers
 from fastapi.testclient import TestClient
-from routes.maintenance import ROOM_MODEL_AVAILABLE
-from database import get_db, SessionLocal
-import models.maintenance
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from database import Base, get_db
 from main import app
+import models.maintenance
+import models.room
+from models.maintenance import MaintenanceRequest, MaintenanceStatus
+from models.room import Room, RoomMaintenanceStatus
 
 scenarios("../../features/maintenance.feature")
 
-# Garante que o get_db não está sendo sobrescrito por outro teste
-@pytest.fixture(autouse=True)
-def reset_overrides():
-    app.dependency_overrides = {}
+engine_test = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+SessionTest = sessionmaker(bind=engine_test, autocommit=False, autoflush=False)
+
+def override_get_db():
+    db = SessionTest()
+    try:
+        yield db
+    finally:
+        db.close()
+
+app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(autouse=True, scope="session")
+def create_tables():
+    Base.metadata.create_all(bind=engine_test)
     yield
-    app.dependency_overrides = {}
+    Base.metadata.drop_all(bind=engine_test)
 
 @pytest.fixture(autouse=True)
-def setup_and_clean():
-    # Remove qualquer override de outros testes
-    app.dependency_overrides = {}
-    # Limpa antes
-    db = SessionLocal()
-    from models.maintenance import MaintenanceRequest
-    db.query(MaintenanceRequest).delete()
+def clean_database():
+    db = SessionTest()
+    for table in reversed(Base.metadata.sorted_tables):
+        db.execute(table.delete())
+    db.commit()
+    for nome in ["Grad 2"]:
+        db.add(Room(
+            name=nome,
+            capacity=30,
+            description="Sala de testes",
+            computers=10,
+            maintenance_status=RoomMaintenanceStatus.no,
+            is_reserved=False,
+        ))
     db.commit()
     db.close()
     yield
-    # Limpa depois
-    db = SessionLocal()
-    db.query(MaintenanceRequest).delete()
+    db = SessionTest()
+    for table in reversed(Base.metadata.sorted_tables):
+        db.execute(table.delete())
     db.commit()
     db.close()
+
+@pytest.fixture(autouse=True)
+def ensure_db_override():
+    app.dependency_overrides[get_db] = override_get_db
+    yield
 
 @pytest.fixture
 def client():
@@ -83,8 +116,7 @@ def teacher_has_confirmed_request(client, context, teacher, id, description):
         json={"room": "Grad 2", "description": description}
     )
     request = res.json()
-    db = SessionLocal()
-    from models.maintenance import MaintenanceRequest, MaintenanceStatus
+    db = SessionTest()
     db.query(MaintenanceRequest).filter(MaintenanceRequest.id == request["id"]).update(
         {"status": MaintenanceStatus.confirmed}
     )
@@ -94,8 +126,12 @@ def teacher_has_confirmed_request(client, context, teacher, id, description):
 
 @given(parsers.parse('a sala "{room}" está em manutenção'))
 def room_in_maintenance(context, room):
-    pytest.skip("Aguardando implementação do model Room pela equipe responsável")
-
+    db = SessionTest()
+    db.query(Room).filter(Room.name == room).update(
+        {"maintenance_status": RoomMaintenanceStatus.yes}
+    )
+    db.commit()
+    db.close()
 
 @when(parsers.parse('o professor informa "{room}" no campo "Nome da sala"'))
 def inform_room(context, room):
@@ -116,11 +152,9 @@ def inform_no_description(context):
 
 @when("o professor submete a solicitação")
 def submit_request(client, context):
-    if not ROOM_MODEL_AVAILABLE and context.get("room") == "Sala Inexistente":
-        pytest.skip("Aguardando implementação do model Room pela equipe responsável")
     body = {
         "room": context.get("room"),
-        "description": context.get("description") 
+        "description": context.get("description")
     }
     res = client.post(
         "/api/maintenance/",
@@ -128,6 +162,7 @@ def submit_request(client, context):
         json=body
     )
     context["response"] = res
+
 @when(parsers.parse('o professor requisita a exclusão dessa solicitação pelo seu ID "{id}"'))
 def delete_request(client, context, id):
     request_id = context["request"]["id"]
@@ -163,7 +198,7 @@ def verify_success(context):
 
 @then("o sistema não registra a solicitação")
 def verify_not_created(context):
-    assert context["response"].status_code in [400, 422]
+    assert context["response"].status_code in [400, 404, 422]
 
 @then(parsers.parse('o sistema retorna mensagem de erro "{message}"'))
 def verify_error_message(context, message):
@@ -171,7 +206,13 @@ def verify_error_message(context, message):
 
 @then(parsers.parse('o sistema exibe a mensagem de erro "{message}"'))
 def verify_display_error(context, message):
-    assert context["response"].status_code == 422
+    response_data = context["response"].json()
+    detail = response_data.get("detail", "")
+    if isinstance(detail, list):
+        messages = [err.get("msg", "") for err in detail]
+        assert any(message in msg for msg in messages)
+    else:
+        assert message in detail
 
 @then("a solicitação não está mais visível para o professor")
 def verify_request_removed(client, context):
@@ -197,13 +238,3 @@ def verify_edit_confirmed(context):
 @then("o sistema não exclui a solicitação")
 def verify_not_deleted(context):
     assert context["response"].status_code == 400
-
-@then(parsers.parse('o sistema exibe a mensagem de erro "{message}"'))
-def verify_display_error(context, message):
-    response_data = context["response"].json()
-    detail = response_data.get("detail", "")
-    if isinstance(detail, list):
-        messages = [err.get("msg", "") for err in detail]
-        assert any(message in msg for msg in messages)
-    else:
-        assert message in detail
