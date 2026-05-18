@@ -23,7 +23,7 @@ O projeto foi construído utilizando tecnologias modernas para garantir escalabi
 
 * **Frontend:** React, JavaScript e CSS puro.
 * **Backend:** FastAPI (Python).
-* **Banco de Dados:** (Definir conforme implementação, ex: PostgreSQL/SQLite).
+* **Banco de Dados:** PostgreSQL via Supabase.
 
 ---
 
@@ -70,9 +70,48 @@ O projeto foi construído utilizando tecnologias modernas para garantir escalabi
 
 ---
 
-## 🚀 Como Executar (Em breve)
+## 🚀 Como Executar o Backend
 
-*(Espaço reservado para instruções de `npm install`, `pip install -r requirements.txt`, etc)*
+1. Crie o ambiente virtual e instale as dependências:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+cd backend
+pip install -r requirements.txt
+```
+
+2. Preencha o arquivo `.env` com as chaves do Supabase. A `DATABASE_URL` precisa ser a URL completa de conexão do PostgreSQL/pooler, incluindo usuário e senha.
+
+3. No SQL Editor do Supabase, execute apenas o complemento da feature de equipamentos, caso essas tabelas ainda nao existam:
+
+```bash
+sql/schema.sql
+```
+
+Esse SQL nao substitui o schema principal do grupo. Ele usa a tabela `public.users` ja existente e adiciona somente `equipment` e `equipment_reservations`.
+
+4. Suba a API:
+
+```bash
+cd backend
+uvicorn main:app --reload
+```
+
+5. Acesse a documentação interativa:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## ✅ Testes
+
+Os testes cobrem os cenários da feature de reserva de equipamentos usando banco em memória:
+
+```bash
+cd backend
+pytest
+```
 
 ---
 **Equipe 1 - ESS 2026.1**
