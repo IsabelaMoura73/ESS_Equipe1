@@ -4,7 +4,7 @@ from typing import List
 from database import get_db
 from models.user import User
 from models.reservation import Reservation, ReservationStatus
-from schemas.user import UserCreate, UserUpdate, UserResponse
+from schemas.user import UserCreate, UserUpdate, UserResponse, UserLogin
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -75,7 +75,7 @@ def desativar_usuario(user_id: int, db: Session = Depends(get_db)):
     if not user.status:
         raise HTTPException(status_code=400, detail="Conta já desativada")
     
-    db.query(Reservation).filter(Reservation.usuario_id == user_id, Reservation.status.in_([ReservationStatus.pending, ReservationStatus.confirmed])
+    db.query(Reservation).filter(Reservation.user_cpf == user.cpf, Reservation.status.in_([ReservationStatus.pending, ReservationStatus.confirmed])
     ).update({"status": ReservationStatus.denied}, synchronize_session=False)
 
     user.status = False
