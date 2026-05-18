@@ -1,12 +1,26 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import Base, engine
+from database import engine, Base
+
+import models
+import models.reservation
+import models.maintenance
+import models.equipment
+
+
+from routes.user import router as user_router
+from routes.maintenance import router as maintenance_router
+from routes.reservation import router as reservation_router
+from routes.maintenance_check import router as maintenance_check_router
 from routes.equipment import router as equipment_router
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Salla - Sistema de Reserva de Salas", version="0.1.0")
+app = FastAPI(
+    title="Salla — Sistema de Reserva de Salas",
+    version="0.2.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,6 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(user_router)
+app.include_router(maintenance_router)
+app.include_router(reservation_router)
+app.include_router(maintenance_check_router)
 app.include_router(equipment_router)
 
 
