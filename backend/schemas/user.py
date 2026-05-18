@@ -40,7 +40,6 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     nome: Optional[str] = None
     senha: Optional[str] = None
-    status: Optional[bool] = None
 
     @field_validator("senha")
     def validar_senha(cls, senha):
@@ -56,3 +55,7 @@ class UserResponse(UserBase):
     status: bool
 
     model_config = {"from_attributes": True}
+
+class UserLogin(BaseModel):
+    cpf: str
+    senha: str

@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from models.user import User
-from schemas.user import UserCreate, UserUpdate, UserResponse
+from models.reservation import Reservation, ReservationStatus
+from schemas.user import UserCreate, UserUpdate, UserResponse, UserLogin
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -24,6 +25,17 @@ def criar_usuario(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(novo_usuario)
     return novo_usuario
+
+@router.post("/login", response_model=UserResponse)
+def login(dados: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.cpf == dados.cpf).first()
+    if not user or not pwd_context.verify(dados.senha, user.senha):
+        raise HTTPException(status_code=401, detail="CPF ou senha inválidos")
+
+    if not user.status:
+        raise HTTPException(status_code=403, detail="Conta desativada")
+    
+    return user
 
 @router.get("/", response_model=List[UserResponse])
 def listar_usuarios(db: Session = Depends(get_db)):
@@ -54,11 +66,19 @@ def atualizar_usuario(user_id: int, dados: UserUpdate, db: Session = Depends(get
     db.refresh(user)
     return user
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deletar_usuario(user_id: int, db: Session = Depends(get_db)):
+@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+def desativar_usuario(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    if not user.status:
+        raise HTTPException(status_code=400, detail="Conta já desativada")
+    
+    db.query(Reservation).filter(Reservation.user_cpf == user.cpf, Reservation.status.in_([ReservationStatus.pending, ReservationStatus.confirmed])
+    ).update({"status": ReservationStatus.denied}, synchronize_session=False)
 
-    db.delete(user)
+    user.status = False
     db.commit()
+    db.refresh(user)
+    return user
