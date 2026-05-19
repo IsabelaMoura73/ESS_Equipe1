@@ -1,6 +1,5 @@
 # Feature 5 — Listagem de salas reservadas (usuario)
 # Aluna: Ana Sofia
-# Persona BDD: Ana Lima
 
 Feature: Listagem de salas reservadas usuario
   Como uma usuario autenticada do sistema Salla
