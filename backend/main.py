@@ -7,6 +7,7 @@ import models
 from routes.reservation import router as reservation_router 
 from routes.user import router as user_router
 from routes.maintenance import router as maintenance_router
+from routes.room import router as room_router 
 
 Base.metadata.create_all(bind=engine)
 
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(reservation_router)
 app.include_router(user_router)
 app.include_router(maintenance_router)
+app.include_router(room_router)  
 
 @app.get("/", tags=["Root"])
 def root():
