@@ -6,6 +6,7 @@ from database import engine, Base
 import models
 import models.reservation
 import models.maintenance
+import models.room
 import models.equipment
 
 
