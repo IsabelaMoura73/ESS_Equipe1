@@ -127,7 +127,7 @@ def delete_room(room_name: str, db: Session = Depends(get_db)):
     if room.is_reserved:
         raise HTTPException(
             status_code=400,
-            detail=f"Não é possível remover a sala '{room.name}' que está reservada"
+            detail="Não é possível remover a sala que está reservada"
         )
 
     db.delete(room)

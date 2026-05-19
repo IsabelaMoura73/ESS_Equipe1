@@ -30,12 +30,11 @@ def override_db():
 
 app.dependency_overrides[get_db] = override_db
 
-scenarios("../../features/room-crud.feature")
+scenarios("../../features/room-service.feature")
 
 
 @pytest.fixture(autouse=True)
 def clean_database():
-    """Garante o override correto e limpa o banco antes de cada teste"""
     app.dependency_overrides[get_db] = override_db
     with engine_test.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
@@ -51,269 +50,170 @@ def client():
 @pytest.fixture
 def context():
     return {
-        "user": None,
-        "rooms": {},
+        "payload": {},
         "response": None,
-        "error_message": None,
+        "missing_field": None,
+        "original_room": None,
     }
 
 
 # ===================== GIVEN STEPS =====================
 
-@given(parsers.parse('eu estou logado como administrador com o usuário "{user}" com CPF "{cpf}"'))
-def admin_logged_in(context, user, cpf):
-    context["user"] = {"name": user, "cpf": cpf, "role": "admin"}
+@given(parsers.re(r'nenhuma sala com nome "(?P<room_name>[^"]+)" existe no banco'))
+def no_room_exists(client, context, room_name):
+    client.delete(f"/api/rooms/{room_name}")
 
 
-@given("eu estou na tela de salas cadastradas")
-def on_rooms_screen(context):
-    context["screen"] = "rooms_list"
-
-
-@given(parsers.parse('a sala de nome "{room_name}" não aparece na lista de salas cadastradas'))
-def room_not_exists(client, context, room_name):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    room_names = [r["name"] for r in rooms]
-    assert room_name not in room_names
-
-
-@given(parsers.parse('eu vejo a sala "{room_name}" na lista de salas cadastradas'))
-def room_exists_in_list(client, context, room_name):
-    """Garante que a sala existe, criando-a se necessário"""
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    room_names = [r["name"] for r in rooms]
-
-    if room_name not in room_names:
-        payload = {
-            "name": room_name,
-            "capacity": 80,
-            "description": "Sala de teste",
-            "computers": 20,
-            "maintenance_status": "Não",
-        }
-        create_response = client.post("/api/rooms/", json=payload)
-        assert create_response.status_code == 201
-        room = create_response.json()
-    else:
-        room = next(r for r in rooms if r["name"] == room_name)
-
-    context["rooms"][room_name] = room
-
-
-@given(parsers.parse('eu vejo a sala "{room_name}" na lista de salas cadastradas com capacidade "{capacity}"'))
-def room_exists_with_capacity(client, context, room_name, capacity):
-    """Garante que a sala existe com a capacidade dada, criando ou atualizando"""
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    found = next((r for r in rooms if r["name"] == room_name), None)
-
-    if found is None:
-        payload = {
-            "name": room_name,
-            "capacity": int(capacity),
-            "description": "Sala de teste",
-            "computers": 20,
-            "maintenance_status": "Não",
-        }
-        create_response = client.post("/api/rooms/", json=payload)
-        assert create_response.status_code == 201
-        room = create_response.json()
-    elif found["capacity"] != int(capacity):
-        update_response = client.put(f"/api/rooms/{room_name}", json={"capacity": int(capacity)})
-        assert update_response.status_code == 200
-        room = update_response.json()
-    else:
-        room = found
-
-    context["rooms"][room_name] = room
-
-
-@given(parsers.parse('eu vejo que a sala "{room_name}" está reservada'))
-def room_is_reserved(client, context, room_name):
-    response = client.patch(f"/api/rooms/{room_name}/reserve")
-    assert response.status_code == 200
-
-
-@given(parsers.parse('eu vejo a sala "{room_name}" na lista de salas cadastradas com capacidade "{capacity}" e com status "reservada"'))
-def room_reserved_with_capacity(client, context, room_name, capacity):
-    """Garante que a sala existe com capacidade dada e marcada como reservada"""
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    found = next((r for r in rooms if r["name"] == room_name), None)
-
-    if found is None:
-        payload = {
-            "name": room_name,
-            "capacity": int(capacity),
-            "description": "Sala de teste",
-            "computers": 20,
-            "maintenance_status": "Não",
-        }
-        create_response = client.post("/api/rooms/", json=payload)
-        assert create_response.status_code == 201
-    elif found["capacity"] != int(capacity):
-        update_response = client.put(f"/api/rooms/{room_name}", json={"capacity": int(capacity)})
-        assert update_response.status_code == 200
-
-    reserve_response = client.patch(f"/api/rooms/{room_name}/reserve")
-    assert reserve_response.status_code == 200
-    context["rooms"][room_name] = reserve_response.json()
-
-
-# ===================== WHEN STEPS =====================
-
-@when('eu seleciono a opção "cadastrar sala"')
-def select_create_room_option(context):
-    context["action"] = "create"
-
-
-@when(parsers.parse('tento cadastrar a sala "{room_name}" com capacidade "{capacity}", descrição com "{description}", número de computadores "{computers}" e status de manutenção "{maintenance}"'))
-def create_room_with_data(client, context, room_name, capacity, description, computers, maintenance):
-    maintenance_status = "Não" if maintenance == "Não" else "Sim"
-
-    payload = {
+# parsers.re with [^"]+ prevents greedy cross-quote matching between overlapping patterns
+@given(parsers.re(r'o corpo da requisição tem nome "(?P<room_name>[^"]+)", capacidade "(?P<capacity>[^"]+)", descrição "(?P<description>[^"]+)", computadores "(?P<computers>[^"]+)" e status de manutenção "(?P<maintenance>[^"]+)"'))
+def set_full_body(context, room_name, capacity, description, computers, maintenance):
+    context["payload"] = {
         "name": room_name,
         "capacity": int(capacity),
         "description": description,
         "computers": int(computers),
-        "maintenance_status": maintenance_status,
+        "maintenance_status": maintenance,
     }
 
+
+@given(parsers.re(r'o corpo da requisição faltando o campo "(?P<field>[^"]+)"'))
+def body_missing_field(context, field):
+    context["missing_field"] = field
+
+
+@given(parsers.re(r'o corpo da requisição tem nome "(?P<room_name>[^"]+)", descrição "(?P<description>[^"]+)", computadores "(?P<computers>[^"]+)"$'))
+def set_body_without_capacity(context, room_name, description, computers):
+    payload = {
+        "name": room_name,
+        "description": description,
+        "computers": int(computers),
+    }
+    if context.get("missing_field"):
+        payload.pop(context["missing_field"], None)
+    context["payload"] = payload
+
+
+@given(parsers.re(r'o corpo da requisição tem nome "(?P<room_name>[^"]+)", capacidade "(?P<capacity>[^"]+)", computadores "(?P<computers>[^"]+)"$'))
+def set_body_no_description(context, room_name, capacity, computers):
+    context["payload"] = {
+        "name": room_name,
+        "capacity": int(capacity),
+        "computers": int(computers),
+    }
+
+
+@given('o corpo da requisição tem nome "D005", capacidade "80", descrição com mais de 500 caracteres')
+def set_body_long_description(context):
+    context["payload"] = {
+        "name": "D005",
+        "capacity": 80,
+        "description": "x" * 501,
+        "computers": 20,
+    }
+
+
+@given(parsers.re(r'uma sala "(?P<room_name>[^"]+)" com capacidade "(?P<capacity>[^"]+)" e computadores "(?P<computers>[^"]+)" já existe no banco'))
+def create_room_in_db(client, context, room_name, capacity, computers):
+    payload = {
+        "name": room_name,
+        "capacity": int(capacity),
+        "description": "Sala de teste",
+        "computers": int(computers),
+        "maintenance_status": "Não",
+    }
     response = client.post("/api/rooms/", json=payload)
-    context["response"] = response
-    context["last_room_name"] = room_name
+    assert response.status_code == 201
+    context["original_room"] = response.json()
 
 
-@when(parsers.parse('eu seleciono a opção "remover sala" da sala "{room_name}"'))
-def select_delete_room_option(context, room_name):
-    context["action"] = "delete"
-    context["target_room"] = room_name
+@given(parsers.re(r'uma sala "(?P<room_name>[^"]+)" com is_reserved "(?P<is_reserved>[^"]+)" existe'))
+def create_room_with_reservation(client, context, room_name, is_reserved):
+    payload = {
+        "name": room_name,
+        "capacity": 80,
+        "description": "Sala de teste",
+        "computers": 20,
+        "maintenance_status": "Não",
+    }
+    response = client.post("/api/rooms/", json=payload)
+    assert response.status_code == 201
+
+    if is_reserved.lower() == "true":
+        reserve_response = client.patch(f"/api/rooms/{room_name}/reserve")
+        assert reserve_response.status_code == 200
 
 
-@when(parsers.parse('confirmo que realmente quero remover a sala "{room_name}"'))
-def confirm_delete_room(client, context, room_name):
-    response = client.delete(f"/api/rooms/{room_name}")
-    context["response"] = response
+# ===================== WHEN STEPS =====================
+
+@when('uma requisição "POST" é enviada para "/api/rooms/" com os dados da sala')
+def post_room_with_data(client, context):
+    context["response"] = client.post("/api/rooms/", json=context["payload"])
 
 
-@when(parsers.parse('eu seleciono a opção "editar sala" da sala "{room_name}"'))
-def select_edit_room_option(context, room_name):
-    context["action"] = "edit"
-    context["target_room"] = room_name
+@when('uma requisição "POST" é enviada para "/api/rooms/"')
+def post_room(client, context):
+    context["response"] = client.post("/api/rooms/", json=context["payload"])
 
 
-@when(parsers.parse('edito a capacidade "{old_capacity}" para "{new_capacity}"'))
-def edit_room_capacity(client, context, old_capacity, new_capacity):
-    room_name = context["target_room"]
-    payload = {"capacity": int(new_capacity)}
-    response = client.put(f"/api/rooms/{room_name}", json=payload)
-    context["response"] = response
-
-
-@when("salvo as alterações")
-def save_changes(context):
-    pass
+@when(parsers.re(r'uma requisição "DELETE" é enviada para "/api/rooms/(?P<room_name>[^"]+)"'))
+def delete_room_request(client, context, room_name):
+    context["response"] = client.delete(f"/api/rooms/{room_name}")
 
 
 # ===================== THEN STEPS =====================
 
-@then("eu vejo uma mensagem de confirmação de cadastro de sala")
-def verify_create_success(context):
-    assert context["response"].status_code == 201
-    assert "name" in context["response"].json()
+@then(parsers.re(r'o status da resposta deve ser "(?P<status_code>[^"]+)"'))
+def check_status_code(context, status_code):
+    assert context["response"].status_code == int(status_code)
 
 
-@then("eu ainda estou na tela de salas cadastradas")
-def still_on_rooms_screen(context):
-    assert context["screen"] == "rooms_list"
+@then(parsers.re(r'a sala deve ser armazenada com name "(?P<room_name>[^"]+)" como primary key'))
+def check_room_name_pk(context, room_name):
+    data = context["response"].json()
+    assert data["name"] == room_name
 
 
-@then(parsers.parse('eu vejo a sala "{room_name}" na lista de salas cadastradas'))
-def verify_room_in_list(client, context, room_name):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    room_names = [r["name"] for r in rooms]
-    assert room_name in room_names
+@then(parsers.re(r'a sala deve ter "(?P<field>[^"]+)" preenchido automaticamente'))
+def check_field_auto_filled(context, field):
+    data = context["response"].json()
+    assert field in data
+    assert data[field] is not None
 
 
-@then("eu vejo uma mensagem de confirmação de remoção de sala")
-def verify_delete_success(context):
-    assert context["response"].status_code == 204
+@then(parsers.re(r'a mensagem de resposta deve conter "(?P<message>[^"]+)"'))
+def check_response_contains(context, message):
+    body = str(context["response"].json())
+    assert message in body
 
 
-@then(parsers.parse('eu não vejo a sala "{room_name}" na lista de salas cadastradas'))
-def verify_room_not_in_list(client, context, room_name):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    room_names = [r["name"] for r in rooms]
-    assert room_name not in room_names
+@then(parsers.re(r"a mensagem de resposta deve ser \"(?P<message>[^\"]+)\""))
+def check_response_exact(context, message):
+    data = context["response"].json()
+    assert data.get("detail") == message
 
 
-@then("eu recebo uma mensagem de confirmação de edição")
-def verify_edit_success(context):
-    assert context["response"].status_code == 200
+@then(parsers.re(r'a sala original mantém capacidade "(?P<capacity>[^"]+)" e computadores "(?P<computers>[^"]+)"'))
+def check_original_room_unchanged(client, context, capacity, computers):
+    room_name = context["original_room"]["name"]
+    response = client.get(f"/api/rooms/{room_name}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["capacity"] == int(capacity)
+    assert data["computers"] == int(computers)
 
 
-@then(parsers.parse('a sala "{room_name}" aparece com capacidade "{capacity}" na lista de salas cadastradas'))
-def verify_room_capacity_updated(client, context, room_name, capacity):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-
-    for room in rooms:
-        if room["name"] == room_name:
-            assert room["capacity"] == int(capacity)
-            return
-
-    assert False, f"Sala {room_name} não encontrada"
+@then('a resposta não contém corpo')
+def check_no_body(context):
+    assert len(context["response"].content) == 0
 
 
-@then(parsers.parse('eu recebo uma mensagem de erro informando que a sala "{room_name}" já existe'))
-def verify_duplicate_error(context, room_name):
-    assert context["response"].status_code in [409, 422]
-    assert "já existe" in context["response"].json().get("detail", "").lower()
+@then(parsers.re(r'a sala "(?P<room_name>[^"]+)" não existe mais no banco'))
+def check_room_deleted(client, context, room_name):
+    response = client.get(f"/api/rooms/{room_name}")
+    assert response.status_code == 404
 
 
-@then("eu continuo na tela com o formulário de cadastro de sala")
-def still_on_create_form(context):
-    assert context["action"] == "create"
-
-
-@then("a tela do formulário de cadastro está com todos os campos vazios")
-def form_fields_empty(context):
-    pass
-
-
-@then(parsers.parse('eu vejo uma mensagem de erro informando que não posso remover uma sala reservada'))
-def verify_cannot_delete_reserved(context):
-    assert context["response"].status_code == 400
-    assert "reservada" in context["response"].json().get("detail", "").lower()
-
-
-@then(parsers.parse('eu continuo vendo a sala "{room_name}" na lista de salas cadastradas'))
-def verify_room_still_in_list(client, context, room_name):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-    room_names = [r["name"] for r in rooms]
-    assert room_name in room_names
-
-
-@then(parsers.parse('eu recebo uma mensagem de erro informando que não é possível editar uma sala reservada'))
-def verify_cannot_edit_reserved(context):
-    assert context["response"].status_code == 400
-    assert "reservada" in context["response"].json().get("detail", "").lower()
-
-
-@then(parsers.parse('a sala "{room_name}" ainda aparece com capacidade "{capacity}" na lista de salas cadastradas e com status "reservada"'))
-def verify_room_unchanged(client, context, room_name, capacity):
-    response = client.get("/api/rooms/")
-    rooms = response.json()["rooms"]
-
-    for room in rooms:
-        if room["name"] == room_name:
-            assert room["capacity"] == int(capacity)
-            assert room["is_reserved"] is True
-            return
-
-    assert False, f"Sala {room_name} não encontrada"
+@then(parsers.re(r'a sala "(?P<room_name>[^"]+)" ainda existe no banco'))
+def check_room_still_exists(client, context, room_name):
+    response = client.get(f"/api/rooms/{room_name}")
+    assert response.status_code == 200
