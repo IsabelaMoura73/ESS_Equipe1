@@ -1,10 +1,4 @@
 """
-Feature 5 — Listagem de salas reservadas (usuário)
-Aluna responsável: Ana Sofia
-
-Endpoints GET de leitura das reservas do usuário.
-Integra com a Feature 7 (Artur) — tabela reservations.
-
 Endpoints:
   GET /api/reservations/my-reservations  → lista reservas do usuário
   GET /api/reservations/{id}             → detalha uma reserva específica
