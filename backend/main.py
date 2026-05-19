@@ -12,6 +12,7 @@ import models.equipment
 
 from routes.user import router as user_router
 from routes.maintenance import router as maintenance_router
+from routes.room import router as room_router 
 from routes.reservation import router as reservation_router
 from routes.maintenance_check import router as maintenance_check_router
 from routes.equipment import router as equipment_router
@@ -41,6 +42,7 @@ app.include_router(equipment_router)
 
 app.include_router(list_reservation_router)
 app.include_router(admin_reservation_router)
+app.include_router(room_router)  
 
 @app.get("/", tags=["Root"])
 def root():
