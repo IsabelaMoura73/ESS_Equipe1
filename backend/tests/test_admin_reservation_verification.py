@@ -1,6 +1,6 @@
 """
-Testes BDD — Feature: Verificacao de Reservas (servico)
-Cenarios orientados a servico: operacoes e efeitos no estado interno.
+Testes BDD — Feature: Verificação de Reservas pelo Administrador
+Aluno: Erick Melo | Persona BDD: Erick Teste
 
 Rodar:
     cd backend && pytest tests/test_admin_reservation_verification.py -v
@@ -140,6 +140,12 @@ def _insert(reservation_id, user_cpf, user_name, user_type, room, start, end, st
 
 # ── Steps: GIVEN ──────────────────────────────────────────────────────────────
 
+@given("Erick Teste esta autenticado como administrador")
+def erick_autenticado(context):
+    context["admin_cpf"] = "00000000000"
+    context["admin_name"] = "Erick Teste"
+
+
 @given(parsers.parse(
     'existe a reserva "{rid:d}" associada ao papel "{role}" '
     'para a sala "{room}" das "{start}" as "{end}"'
@@ -171,25 +177,25 @@ def insere_reserva_de_outrem(rid, nome, room, st):
 
 # ── Steps: WHEN ───────────────────────────────────────────────────────────────
 
-@when("o servico retorna a listagem de reservas")
+@when("Erick consulta a listagem de reservas")
 def lista_reservas(client, context):
     context["response"] = client.get("/api/admin/reservations")
 
 
-@when(parsers.parse('o administrador solicita a confirmacao da reserva "{rid:d}"'))
+@when(parsers.parse('Erick solicita a confirmacao da reserva "{rid:d}"'))
 def solicita_confirmacao(client, context, rid):
     context["response"] = client.patch(f"/api/admin/reservations/{rid}/confirm")
     context["reservation_id"] = rid
 
 
-@when(parsers.parse('o administrador solicita a negacao da reserva "{rid:d}" sem informar justificativa'))
+@when(parsers.parse('Erick solicita a negacao da reserva "{rid:d}" sem informar justificativa'))
 def solicita_negacao(client, context, rid):
     # Sem body → nenhum campo de justificativa enviado/exigido.
     context["response"] = client.patch(f"/api/admin/reservations/{rid}/deny")
     context["reservation_id"] = rid
 
 
-@when(parsers.parse('o administrador consulta o detalhe da reserva "{rid:d}"'))
+@when(parsers.parse('Erick consulta o detalhe da reserva "{rid:d}"'))
 def consulta_detalhe(client, context, rid):
     context["response"] = client.get(f"/api/admin/reservations/{rid}")
     context["reservation_id"] = rid
