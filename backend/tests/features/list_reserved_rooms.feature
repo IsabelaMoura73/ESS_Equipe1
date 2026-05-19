@@ -1,55 +1,49 @@
 # Feature 5 — Listagem de salas reservadas (usuario)
-# Aluna: Ana Sofia
+# Ana Sofia
 
 Feature: Listagem de salas reservadas usuario
-  Como uma usuario autenticada do sistema Salla
-  Quero visualizar a lista das minhas reservas de salas
-  Para acompanhar o status de cada reserva e acessar seus detalhes
+  Como um servico de listagem de reservas
+  Quero recuperar e filtrar reservas por usuario e status
+  Para que o sistema retorne o estado interno correto das reservas cadastradas
 
-  Scenario: Listar todas as reservas sem filtro
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And Ana possui reservas com status "pending" e "confirmed"
-    When Ana acessa a listagem de suas reservas
-    Then a listagem retorna todas as reservas de Ana independente do status
+  Scenario: Recuperar todas as reservas de um usuario sem filtro de status
+    Given o sistema possui reservas do CPF "11122233344" com status "pending" e "confirmed"
+    When o servico de listagem e consultado para o CPF "11122233344" sem filtro de status
+    Then o sistema retorna todas as reservas associadas ao CPF "11122233344"
 
-  Scenario: Filtrar reservas por status pendente
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And Ana possui uma reserva com status "pending" da sala "D005" das "2026-07-01T08:00:00" as "2026-07-01T10:00:00"
-    And Ana possui uma reserva com status "confirmed" da sala "E101" das "2026-07-02T08:00:00" as "2026-07-02T10:00:00"
-    When Ana filtra suas reservas por status "pending"
-    Then a listagem retorna apenas reservas com status "pending"
+  Scenario: Recuperar reservas de um usuario filtradas por status pendente
+    Given o sistema possui uma reserva do CPF "11122233344" com status "pending" da sala "D005" das "2026-07-01T08:00:00" as "2026-07-01T10:00:00"
+    And o sistema possui uma reserva do CPF "11122233344" com status "confirmed" da sala "E101" das "2026-07-02T08:00:00" as "2026-07-02T10:00:00"
+    When o servico de listagem e consultado para o CPF "11122233344" com filtro de status "pending"
+    Then o sistema retorna somente reservas com status "pending" para o CPF "11122233344"
 
-  Scenario: Filtrar reservas por status confirmada
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And Ana possui uma reserva com status "pending" da sala "D005" das "2026-07-03T08:00:00" as "2026-07-03T10:00:00"
-    And Ana possui uma reserva com status "confirmed" da sala "E101" das "2026-07-04T08:00:00" as "2026-07-04T10:00:00"
-    When Ana filtra suas reservas por status "confirmed"
-    Then a listagem retorna apenas reservas com status "confirmed"
+  Scenario: Recuperar reservas de um usuario filtradas por status confirmada
+    Given o sistema possui uma reserva do CPF "11122233344" com status "pending" da sala "D005" das "2026-07-03T08:00:00" as "2026-07-03T10:00:00"
+    And o sistema possui uma reserva do CPF "11122233344" com status "confirmed" da sala "E101" das "2026-07-04T08:00:00" as "2026-07-04T10:00:00"
+    When o servico de listagem e consultado para o CPF "11122233344" com filtro de status "confirmed"
+    Then o sistema retorna somente reservas com status "confirmed" para o CPF "11122233344"
 
-  Scenario: Listagem ordenada da mais recente para a mais antiga
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And Ana possui uma reserva com status "pending" da sala "D005" das "2026-07-01T08:00:00" as "2026-07-01T10:00:00"
-    And Ana possui uma reserva com status "pending" da sala "E101" das "2026-07-10T08:00:00" as "2026-07-10T10:00:00"
-    When Ana acessa a listagem de suas reservas
-    Then a listagem esta ordenada da mais recente para a mais antiga
+  Scenario: Reservas retornadas ordenadas por data de inicio decrescente
+    Given o sistema possui uma reserva do CPF "11122233344" com status "pending" da sala "D005" das "2026-07-01T08:00:00" as "2026-07-01T10:00:00"
+    And o sistema possui uma reserva do CPF "11122233344" com status "pending" da sala "E101" das "2026-07-10T08:00:00" as "2026-07-10T10:00:00"
+    When o servico de listagem e consultado para o CPF "11122233344" sem filtro de status
+    Then o sistema retorna as reservas ordenadas da mais recente para a mais antiga
 
-  Scenario: Visualizar detalhes de uma reserva especifica
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And Ana possui uma reserva com status "pending" da sala "D005" das "2026-07-05T08:00:00" as "2026-07-05T10:00:00"
-    When Ana acessa os detalhes da sua reserva
-    Then os detalhes exibem sala "D005" e status "pending"
+  Scenario: Recuperar detalhes de uma reserva pertencente ao usuario
+    Given o sistema possui uma reserva do CPF "11122233344" com status "pending" da sala "D005" das "2026-07-05T08:00:00" as "2026-07-05T10:00:00"
+    When o servico de detalhe e consultado para o CPF "11122233344" e o id da reserva
+    Then o sistema retorna os dados da reserva com sala "D005" e status "pending"
 
-  Scenario: Tentar acessar reserva de outro usuario
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    And existe uma reserva de outro usuario com CPF "99988877766" da sala "D005" das "2026-07-06T08:00:00" as "2026-07-06T10:00:00"
-    When Ana tenta acessar os detalhes da reserva do outro usuario
-    Then Ana recebe o erro "Acesso negado"
+  Scenario: Tentativa de acesso a reserva pertencente a outro usuario
+    Given o sistema possui uma reserva de outro usuario com CPF "99988877766" da sala "D005" das "2026-07-06T08:00:00" as "2026-07-06T10:00:00"
+    When o servico de detalhe e consultado para o CPF "11122233344" e o id da reserva do outro usuario
+    Then o sistema rejeita o acesso com erro "Acesso negado"
 
-  Scenario: Listar reservas quando nao ha nenhuma cadastrada
-    Given Ana Lima esta autenticada no sistema com CPF "11122233344"
-    When Ana acessa a listagem de suas reservas
-    Then a listagem retorna uma lista vazia
+  Scenario: Consulta de listagem para usuario sem reservas cadastradas
+    Given o sistema nao possui reservas para o CPF "11122233344"
+    When o servico de listagem e consultado para o CPF "11122233344" sem filtro de status
+    Then o sistema retorna uma colecao vazia de reservas
 
-  Scenario: Tentar listar reservas sem informar o CPF
-    When uma usuario nao autenticada tenta listar reservas sem informar o CPF
-    Then o sistema retorna erro de validacao com codigo 422
+  Scenario: Consulta de listagem sem identificacao de usuario
+    When o servico de listagem e consultado sem informar o CPF do usuario
+    Then o sistema rejeita a requisicao por ausencia de parametro obrigatorio
