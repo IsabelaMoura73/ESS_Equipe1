@@ -1,5 +1,6 @@
 """
-Testes BDD — Feature: Verificacao de Reservas (Administrador)
+Testes BDD — Feature: Verificacao de Reservas (servico)
+Cenarios orientados a servico: operacoes e efeitos no estado interno.
 
 Rodar:
     cd backend && pytest tests/test_admin_reservation_verification.py -v
@@ -103,13 +104,6 @@ STATUS_MAP = {
     "completed": ReservationStatus.completed,
 }
 
-ROLE_MAP = {
-    "Aluno": "discente",
-    "Professor": "docente",
-    "discente": "discente",
-    "docente": "docente",
-}
-
 
 def _parse_dt(dt_str: str) -> datetime:
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M"):
@@ -146,17 +140,12 @@ def _insert(reservation_id, user_cpf, user_name, user_type, room, start, end, st
 
 # ── Steps: GIVEN ──────────────────────────────────────────────────────────────
 
-@given("o administrador autenticado acessa a pagina de Visualizacao de Reservas")
-def admin_autenticado(context):
-    context["admin"] = True
-
-
 @given(parsers.parse(
-    'o sistema possui a reserva "{rid:d}" associada ao papel "{role}" '
+    'existe a reserva "{rid:d}" associada ao papel "{role}" '
     'para a sala "{room}" das "{start}" as "{end}"'
 ))
 def insere_por_papel(rid, role, room, start, end):
-    _insert(rid, f"cpf-{rid}", f"Usuario {rid}", ROLE_MAP[role], room, start, end, ReservationStatus.pending)
+    _insert(rid, f"cpf-{rid}", f"Usuario {rid}", role, room, start, end, ReservationStatus.pending)
 
 
 @given(parsers.parse('existe a reserva "{rid:d}" para a sala "{room}" com status "{st}"'))
@@ -182,45 +171,40 @@ def insere_reserva_de_outrem(rid, nome, room, st):
 
 # ── Steps: WHEN ───────────────────────────────────────────────────────────────
 
-@when("o sistema carrega a listagem de reservas cadastradas")
-def carrega_listagem(client, context):
+@when("o servico retorna a listagem de reservas")
+def lista_reservas(client, context):
     context["response"] = client.get("/api/admin/reservations")
 
 
-@when(parsers.parse('o administrador clica no botao Confirmar para a reserva "{rid:d}"'))
-def clica_confirmar(client, context, rid):
+@when(parsers.parse('o administrador solicita a confirmacao da reserva "{rid:d}"'))
+def solicita_confirmacao(client, context, rid):
     context["response"] = client.patch(f"/api/admin/reservations/{rid}/confirm")
     context["reservation_id"] = rid
 
 
-@when(parsers.parse('o administrador clica no botao Negar para a reserva "{rid:d}"'))
-def clica_negar(client, context, rid):
+@when(parsers.parse('o administrador solicita a negacao da reserva "{rid:d}" sem informar justificativa'))
+def solicita_negacao(client, context, rid):
+    # Sem body → nenhum campo de justificativa enviado/exigido.
     context["response"] = client.patch(f"/api/admin/reservations/{rid}/deny")
     context["reservation_id"] = rid
 
 
-@when(parsers.parse('o administrador visualiza os detalhes da reserva "{rid:d}"'))
-def visualiza_detalhes(client, context, rid):
+@when(parsers.parse('o administrador consulta o detalhe da reserva "{rid:d}"'))
+def consulta_detalhe(client, context, rid):
     context["response"] = client.get(f"/api/admin/reservations/{rid}")
     context["reservation_id"] = rid
 
 
-@when(parsers.parse('o administrador acessa os detalhes da reserva "{rid:d}"'))
-def acessa_detalhes(client, context, rid):
-    visualiza_detalhes(client, context, rid)
-
-
 # ── Steps: THEN ───────────────────────────────────────────────────────────────
 
-@then("a reserva do professor e exibida antes da reserva do aluno na lista")
-def professor_antes_aluno(context):
+@then(parsers.parse('a reserva "{rid_first:d}" aparece antes da reserva "{rid_second:d}"'))
+def ordem_listagem(context, rid_first, rid_second):
     r = context["response"]
     assert r.status_code == 200, r.text
-    data = r.json()
-    assert len(data) >= 2
-    teacher_idx = next(i for i, x in enumerate(data) if x["user_type"] == "docente")
-    student_idx = next(i for i, x in enumerate(data) if x["user_type"] == "discente")
-    assert teacher_idx < student_idx, f"Professor deve vir antes do aluno: {data}"
+    ids = [item["id"] for item in r.json()]
+    assert rid_first in ids and rid_second in ids
+    assert ids.index(rid_first) < ids.index(rid_second), \
+        f"Esperava {rid_first} antes de {rid_second}, ordem retornada: {ids}"
 
 
 @then(parsers.parse('o status de ambas permanece "{expected}"'))
@@ -230,17 +214,23 @@ def status_inalterado(context, expected):
         assert res["status"] == expected
 
 
-@then(parsers.parse('o sistema atualiza o status da reserva "{rid:d}" para "{expected}" no banco de dados'))
-def status_atualizado_no_banco(rid, expected):
+@then(parsers.parse('o status da reserva "{rid:d}" passa a ser "{expected}"'))
+def status_apos_acao(rid, expected):
     db = SessionTest()
     res = db.query(Reservation).filter(Reservation.id == rid).first()
     db.close()
-    assert res is not None, f"Reserva {rid} nao encontrada"
-    assert res.status.value == expected, f"Esperava {expected}, obteve {res.status.value}"
+    assert res is not None
+    assert res.status.value == expected, \
+        f"Esperava status '{expected}', mas a reserva esta '{res.status.value}'"
 
 
-@then(parsers.parse('o sistema retorna a mensagem de sucesso "{msg}"'))
-def mensagem_sucesso(context, msg):
+@then(parsers.parse('o status da reserva "{rid:d}" permanece "{expected}"'))
+def status_permanece(rid, expected):
+    status_apos_acao(rid, expected)
+
+
+@then(parsers.parse('o servico retorna a mensagem "{msg}"'))
+def mensagem_servico(context, msg):
     r = context["response"]
     assert r.status_code == 200, r.text
     body = r.json()
@@ -248,39 +238,34 @@ def mensagem_sucesso(context, msg):
         f"Esperava '{msg}' em '{body}'"
 
 
-@then("o sistema exibe os botoes Confirmar e Negar com o estado desabilitado")
-def botoes_desabilitados(context):
+@then(parsers.parse('o servico rejeita a operacao com a mensagem "{msg}"'))
+def operacao_rejeitada(context, msg):
+    r = context["response"]
+    assert r.status_code in (400, 403, 404, 409, 422), \
+        f"Esperava erro 4xx, recebeu {r.status_code}: {r.text}"
+    detail = r.json().get("detail", "")
+    assert _normalize(msg) in _normalize(detail), \
+        f"Esperava '{msg}' em '{detail}'"
+
+
+@then(parsers.parse('o servico informa as acoes permitidas como "{actions_csv}"'))
+def acoes_permitidas(context, actions_csv):
     r = context["response"]
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["can_confirm"] is False
-    assert body["can_deny"] is False
+    expected = [a.strip() for a in actions_csv.split(",") if a.strip()]
+    assert r.json().get("allowed_actions") == expected, \
+        f"Esperava allowed_actions={expected}, recebi {r.json().get('allowed_actions')}"
 
 
-@then(parsers.parse('o sistema nao permite alterar o status da reserva "{rid:d}"'))
-def nao_permite_alterar(client, context, rid):
-    # Tenta confirmar uma reserva ja decidida → deve retornar erro
-    resp = client.patch(f"/api/admin/reservations/{rid}/confirm")
-    assert resp.status_code == 400, f"Esperava 400, recebeu {resp.status_code}: {resp.text}"
-    detail = resp.json().get("detail", "")
-    assert _normalize("ja decidida") in _normalize(detail) or _normalize("decidida") in _normalize(detail)
-
-
-@then("o campo nome da sala consta como somente leitura")
-def sala_somente_leitura(context):
-    r = context["response"]
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert "room" in body["read_only_fields"], \
-        f"'room' deveria estar em read_only_fields: {body['read_only_fields']}"
-
-
-@then("o administrador possui apenas as acoes Confirmar e Negar habilitadas")
-def apenas_confirmar_negar(context):
-    r = context["response"]
-    body = r.json()
-    # Reserva pendente: ambas acoes habilitadas, demais campos somente leitura
-    assert body["can_confirm"] is True
-    assert body["can_deny"] is True
-    for campo in ("room", "start_time", "end_time"):
-        assert campo in body["read_only_fields"]
+@then(parsers.parse('o servico nao expoe operacao para alterar os dados da reserva "{rid:d}"'))
+def sem_endpoint_de_edicao(client, rid):
+    # Verifica que nao ha rota de admin para edicao/exclusao dos dados.
+    # Qualquer endpoint mutativo (PUT, PATCH dos campos, DELETE) deve retornar 404/405.
+    for method, path in [
+        ("PUT", f"/api/admin/reservations/{rid}"),
+        ("PATCH", f"/api/admin/reservations/{rid}"),
+        ("DELETE", f"/api/admin/reservations/{rid}"),
+    ]:
+        resp = client.request(method, path, json={"room": "Outra Sala"})
+        assert resp.status_code in (404, 405), \
+            f"{method} {path} deveria nao existir, mas retornou {resp.status_code}"

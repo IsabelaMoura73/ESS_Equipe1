@@ -1,60 +1,64 @@
-# Verificação de Reservas (Administrador)
+# Verificação de Reservas (Administrador) — Service Scenarios
 
 Documentação da feature `features/admin-reservation-verification.feature`,
 implementada no backend FastAPI do projeto Salla.
 
+Os cenários desta feature são **service/controller scenarios**: descrevem
+operações expostas pelo serviço e seus efeitos no estado interno do sistema,
+**sem** referência a telas, botões, campos ou navegação da interface gráfica.
+Eles complementam — não substituem — eventuais cenários de UI que a equipe de
+frontend venha a definir.
+
 ## 1. Visão geral
 
-A feature permite que um administrador autenticado:
+A feature define cinco operações do serviço de administração de reservas:
 
-1. Visualize a listagem de todas as reservas cadastradas, com prioridade para
-   reservas feitas por **docentes/professores**.
-2. **Confirme** uma reserva pendente.
-3. **Negue** uma reserva pendente (sem necessidade de justificativa).
-4. Visualize os detalhes de uma reserva já decidida sem poder reverter a decisão.
-5. Acesse uma reserva alheia em modo de leitura, com apenas as ações
-   `Confirmar`/`Negar` habilitadas.
+1. **Consultar listagem priorizada** — reservas de docentes/professores
+   precedem as de discentes/alunos.
+2. **Confirmar** uma reserva pendente.
+3. **Negar** uma reserva pendente (sem justificativa).
+4. **Imutabilidade** — reservas já decididas (`confirmed`, `denied`,
+   `completed`) não podem ter o status alterado.
+5. **Superfície restrita** — o serviço expõe ao administrador apenas as ações
+   `confirm` e `deny`; não há operação para alterar os dados da reserva.
 
 ## 2. Arquivos criados / alterados
 
 | Arquivo | Tipo | Descrição |
 |---|---|---|
 | `backend/routes/admin_reservation.py` | novo | Router com os endpoints de administração |
-| `backend/schemas/admin_reservation.py` | novo | Schemas Pydantic de listagem, detalhe e resposta de ação |
+| `backend/schemas/admin_reservation.py` | novo | Schemas Pydantic (listagem, detalhe, ação) |
 | `backend/main.py` | alterado | Registro do `admin_reservation_router` |
-| `backend/tests/features/admin_reservation_verification.feature` | novo | Cenários Gherkin para BDD |
+| `backend/tests/features/admin_reservation_verification.feature` | novo | Cenários Gherkin (service-level) |
 | `backend/tests/test_admin_reservation_verification.py` | novo | Step definitions `pytest-bdd` |
+| `features/admin-reservation-verification.feature` | reescrito | Versão canônica em estilo service |
 
-Nenhum modelo (`models/reservation.py`) foi alterado: a feature consome o campo
-`user_type` que já existia no modelo (`"student"`/`"teacher"` ou
-`"discente"`/`"docente"`).
+Nenhum modelo foi alterado: a feature consome o campo `user_type` que já
+existia em `models/reservation.py`.
 
 ## 3. Endpoints
 
-Todos os endpoints estão sob o prefixo `/api/admin/reservations`.
+Todos os endpoints estão sob `/api/admin/reservations`.
 
 ### 3.1 `GET /api/admin/reservations`
 
-Lista todas as reservas. A ordenação é:
+Lista todas as reservas. Ordenação:
 
-1. `user_type` pertencente ao conjunto `{teacher, docente, professor}` → vem antes.
-2. Empate é resolvido por `start_time` ascendente.
+1. `user_type` ∈ `{teacher, docente, professor}` → vem antes.
+2. Empate por `start_time` ascendente.
 
-Resposta `200 OK`: lista de `AdminReservationListItem` contendo `user_type` para
-que o frontend possa exibir o badge de prioridade.
+`200 OK` → lista de `AdminReservationListItem` (inclui `user_type`).
 
 ### 3.2 `GET /api/admin/reservations/{id}`
 
-Retorna os detalhes da reserva acrescidos de três campos auxiliares:
+Retorna o detalhe acrescido de:
 
-- `can_confirm` (bool) — `true` apenas quando o status é `pending`.
-- `can_deny` (bool) — idem.
-- `read_only_fields` (lista) — campos que a UI deve renderizar como
-  somente-leitura para o admin (`room`, `start_time`, `end_time`,
-  `user_cpf`, `user_name`).
+- `allowed_actions: list[str]` — ações que o serviço aceita para a reserva no
+  estado atual. Vale `["confirm", "deny"]` quando `status == pending`, lista
+  vazia caso contrário.
 
-Esse contrato cobre os cenários 4 e 5 da feature: o frontend usa essas flags
-para desabilitar os botões e travar o campo "Nome da sala".
+Esse campo é o ponto de contato com o requisito de imutabilidade e de
+superfície restrita: o serviço declara explicitamente o que pode ser feito.
 
 Respostas:
 
@@ -63,60 +67,61 @@ Respostas:
 
 ### 3.3 `PATCH /api/admin/reservations/{id}/confirm`
 
-Confirma uma reserva pendente.
-
 - `200 OK` — `{ "message": "Reserva confirmada com sucesso", "reservation": {...} }`
-- `400 Bad Request` — reserva não está em `pending` (`"Reserva já decidida..."`).
+- `400 Bad Request` — status diferente de `pending` (`"Reserva já decidida não pode ser alterada"`).
 - `404 Not Found` — id inexistente.
 
 ### 3.4 `PATCH /api/admin/reservations/{id}/deny`
 
-Nega uma reserva pendente. Não exige justificativa (a feature explicita isso no
-cenário 3).
+Não recebe body (negação não exige justificativa).
 
 - `200 OK` — `{ "message": "Reserva negada com sucesso", "reservation": {...} }`
-- `400 Bad Request` / `404 Not Found` — análogos ao confirm.
+- `400` / `404` análogos ao confirm.
 
-## 4. Regras de negócio implementadas
+### 3.5 Operações ausentes propositalmente
+
+`PUT`, `PATCH` (raiz) e `DELETE` em `/api/admin/reservations/{id}` **não
+existem**. Isso é parte do contrato: o admin não altera dados da reserva.
+Qualquer chamada a esses verbos retorna `404` ou `405`, o que é verificado pelo
+cenário 5.
+
+## 4. Regras de negócio
 
 | ID | Regra | Onde |
 |----|-------|------|
-| RN-A1 | Reservas de docentes/professores aparecem antes das de discentes/alunos | `routes/admin_reservation.list_all_reservations` via `CASE` no `ORDER BY` |
-| RN-A2 | Confirmar/Negar só são válidos para reservas `pending` | `routes/admin_reservation._decide` |
-| RN-A3 | Reservas já decididas (`confirmed`/`denied`/`completed`) são somente-leitura | `can_confirm`/`can_deny` = `false` no detalhe + 400 nas rotas de ação |
-| RN-A4 | Admin não pode editar dados de reserva alheia | Não há endpoint de edição; o detalhe expõe `read_only_fields` para a UI |
-| RN-A5 | Negar dispensa justificativa | `PATCH /deny` não recebe body |
-| RN-A6 | Mensagens em português conforme a feature | Strings literais em `_decide` |
+| RN-A1 | Reservas de docentes precedem as de discentes na listagem | `list_all_reservations`, `CASE` no `ORDER BY` |
+| RN-A2 | `confirm` e `deny` só atuam em reservas `pending` | `_decide` em `routes/admin_reservation.py` |
+| RN-A3 | Reserva decidida é imutável (status não regride nem muda) | `_decide` retorna 400 + `allowed_actions=[]` no detalhe |
+| RN-A4 | Admin não pode editar dados da reserva | Ausência intencional de endpoint de edição |
+| RN-A5 | Negar não exige justificativa | `PATCH /deny` não aceita body |
+| RN-A6 | Mensagens em PT-BR como na feature | Literais em `_decide` |
 
 ## 5. Testes (BDD)
 
-Os cenários da feature foram traduzidos para o arquivo
+Os cenários foram traduzidos para
 `backend/tests/features/admin_reservation_verification.feature`, mantendo o
 mesmo padrão dos demais arquivos da pasta `backend/tests/features/`.
 
 ### 5.1 Estrutura
 
-`test_admin_reservation_verification.py` segue o mesmo template de
+`test_admin_reservation_verification.py` segue o template de
 `test_reservation.py` e `test_list_reservation.py`:
 
-- **Banco em memória SQLite** com `StaticPool` — isolamento total entre testes.
-- **Fixture `clean_database`** (autouse) — limpa tabelas e popula salas
-  (`Lab 1`, `Lab 2`, `Auditorio`, `Grad 3`, `Grad 4`) antes de cada teste.
-- **`override_get_db`** — substitui a dependência do FastAPI para usar o banco
-  de teste.
-- **`ROLE_MAP`** — traduz `"Aluno"`/`"Professor"` (linguagem da feature) para
-  os valores armazenados (`"discente"`/`"docente"`).
+- **Banco SQLite em memória** com `StaticPool` — isolamento por teste.
+- **Fixture `clean_database`** (autouse) — limpa tabelas e popula as salas
+  `Lab 1`, `Lab 2`, `Auditorio`, `Grad 3`, `Grad 4`.
+- **`override_get_db`** — substitui a dependência do FastAPI pelo banco de teste.
 - **`STATUS_MAP`** — converte strings em valores `ReservationStatus`.
 
 ### 5.2 Mapeamento cenário ↔ teste
 
-| Cenário da feature | Função de teste gerada | Endpoints exercitados |
+| Cenário (service) | Função de teste | Endpoints exercitados |
 |---|---|---|
-| Visualização com prioridade para professores | `test_visualizacao_da_listagem_com_prioridade_para_professores` | `GET /api/admin/reservations` |
-| Confirmar reserva pendente | `test_confirmar_uma_reserva_pendente_com_sucesso` | `PATCH .../{id}/confirm` |
-| Negar reserva pendente sem justificativa | `test_negar_uma_reserva_pendente_sem_justificativa` | `PATCH .../{id}/deny` |
-| Tentar reverter reserva já decidida | `test_tentativa_de_reverter_uma_reserva_ja_decidida` | `GET .../{id}` + `PATCH .../confirm` |
-| Editar dados de reserva alheia | `test_tentativa_de_editar_os_dados_de_uma_reserva_alheia` | `GET .../{id}` |
+| Listagem prioriza reservas de docentes | `test_listagem_prioriza_reservas_de_docentes` | `GET /api/admin/reservations` |
+| Confirmar uma reserva pendente | `test_confirmar_uma_reserva_pendente` | `PATCH .../{id}/confirm` |
+| Negar uma reserva pendente sem justificativa | `test_negar_uma_reserva_pendente_sem_justificativa` | `PATCH .../{id}/deny` |
+| Reserva já decidida é imutável | `test_reserva_ja_decidida_e_imutavel` | `PATCH .../{id}/confirm` (esperando 400) |
+| Serviço expõe somente as ações confirmar e negar | `test_servico_expoe_somente_as_acoes_confirmar_e_negar` | `GET .../{id}` + `PUT/PATCH/DELETE` (esperando 404/405) |
 
 ### 5.3 Como rodar
 
@@ -128,14 +133,34 @@ pytest tests/test_admin_reservation_verification.py -v
 
 Resultado esperado: **5 passed**.
 
-## 6. Decisões de projeto
+## 6. Por que cenários de serviço (e não de UI)
 
-- **Ações via `PATCH` com endpoints dedicados** (`/confirm`, `/deny`) em vez de
-  um único `PATCH` recebendo `status`. Isso evita que o admin tente forçar
-  estados inválidos (como voltar para `pending`) e deixa o contrato explícito.
-- **Flags `can_confirm`/`can_deny`/`read_only_fields` no detalhe**: o backend
-  serve a fonte da verdade sobre o que está habilitado. O frontend apenas
-  reflete o estado, sem duplicar a regra de negócio (cenários 4 e 5).
-- **Sem alterações no modelo**: a feature reusa `user_type` já existente.
-  O conjunto `TEACHER_TYPES = {"teacher", "docente", "professor"}` aceita os
-  sinônimos possíveis dependendo de qual outra feature alimente o campo.
+Conforme orientação do material da disciplina, cenários de serviço:
+
+- Não mencionam elementos da interface (botões, campos, páginas), abstrações
+  de UI ou navegação.
+- Focam em **ações** expostas pelo sistema e nos **efeitos** sobre o estado
+  interno (status no banco, ordem da listagem retornada, ações declaradas
+  como permitidas).
+- Tornam explícitas requisições e respostas da API.
+
+Essa feature foi reescrita para se enquadrar no critério. A versão inicial,
+com passos como "clica no botão Confirmar" ou "o campo Nome da sala permanece
+no modo somente leitura", foi substituída por:
+
+- "o administrador solicita a confirmação da reserva 105"
+- "o serviço informa as ações permitidas como confirm,deny"
+- "o serviço não expõe operação para alterar os dados da reserva 108"
+
+## 7. Decisões de projeto
+
+- **Endpoints dedicados `/confirm` e `/deny`** em vez de um `PATCH` genérico
+  com `status` no body — impede transições inválidas e deixa o contrato
+  explícito.
+- **`allowed_actions` no detalhe** — o serviço é a fonte da verdade sobre o
+  que pode ser feito. A UI apenas reflete esse estado (e existe um cenário de
+  serviço que cobre a presença/ausência dessas ações).
+- **Sem endpoint de edição para o admin** — testado por ausência: o cenário 5
+  verifica que `PUT`/`PATCH`/`DELETE` retornam 404 ou 405.
+- **Reuso de `user_type`** — `TEACHER_TYPES = {"teacher", "docente",
+  "professor"}` aceita sinônimos vindos das demais features.

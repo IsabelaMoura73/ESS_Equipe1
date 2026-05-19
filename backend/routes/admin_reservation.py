@@ -77,7 +77,7 @@ def get_reservation_detail(reservation_id: int, db: Session = Depends(get_db)) -
             detail="Reserva não encontrada",
         )
 
-    can_act = reservation.status == ReservationStatus.pending
+    allowed = ["confirm", "deny"] if reservation.status == ReservationStatus.pending else []
     return AdminReservationDetail(
         id=reservation.id,
         user_cpf=reservation.user_cpf,
@@ -87,9 +87,7 @@ def get_reservation_detail(reservation_id: int, db: Session = Depends(get_db)) -
         start_time=reservation.start_time,
         end_time=reservation.end_time,
         status=reservation.status,
-        can_confirm=can_act,
-        can_deny=can_act,
-        read_only_fields=["room", "start_time", "end_time", "user_cpf", "user_name"],
+        allowed_actions=allowed,
     )
 
 
