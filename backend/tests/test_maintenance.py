@@ -11,8 +11,9 @@ import models.maintenance
 import models.room
 from models.maintenance import MaintenanceRequest, MaintenanceStatus
 from models.room import Room, RoomMaintenanceStatus
+from schemas.maintenance import MaintenanceRequestCreate
 
-scenarios("../../features/maintenance.feature")
+scenarios("features/maintenance.feature")
 
 engine_test = create_engine(
     "sqlite:///:memory:",
@@ -42,15 +43,14 @@ def clean_database():
     for table in reversed(Base.metadata.sorted_tables):
         db.execute(table.delete())
     db.commit()
-    for nome in ["Grad 2"]:
-        db.add(Room(
-            name=nome,
-            capacity=30,
-            description="Sala de testes",
-            computers=10,
-            maintenance_status=RoomMaintenanceStatus.no,
-            is_reserved=False,
-        ))
+    db.add(Room(
+        name="Grad 2",
+        capacity=30,
+        description="Sala de testes",
+        computers=10,
+        maintenance_status=RoomMaintenanceStatus.no,
+        is_reserved=False,
+    ))
     db.commit()
     db.close()
     yield
@@ -73,47 +73,49 @@ def client():
 def context():
     return {}
 
-@given(parsers.parse('o professor "{teacher}" está autenticado'))
-def teacher_authenticated(context, teacher):
-    context["teacher"] = teacher
+# ── Givens ───────────────────────────────────────────────────────────────────
 
-@given(parsers.parse('nenhuma solicitação sua existe para a sala "{room}"'))
-def no_existing_request(room):
-    pass
+@given(parsers.parse('o MaintenanceService não tem uma solicitação pendente do professor "{teacher}" para a sala "{room}"'))
+def no_pending_request(teacher, room):
+    pass  # banco já limpo pelo clean_database
 
-@given(parsers.parse('já existe uma solicitação com status "Pendente" para a sala "{room}" associada ao professor "{teacher}"'))
-def existing_pending_request(client, context, room, teacher):
+@given(parsers.parse('já existe uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}"'))
+def existing_pending_request(client, context, teacher, room):
     res = client.post(
         "/api/maintenance/",
         params={"teacher_name": teacher},
-        json={"room": room, "description": "Existing request"}
+        json={"room": room, "description": "Solicitação existente"}
     )
     context["existing_request"] = res.json()
 
-@given(parsers.parse('o professor "{teacher}" possui uma solicitação com ID "{id}" e status "Pendente" em seu nome'))
-def teacher_has_pending_request(client, context, teacher, id):
+@given(parsers.parse('o MaintenanceService não tem nenhuma sala com nome "{room}"'))
+def no_room(room):
+    pass  # sala não cadastrada no banco de testes
+
+@given(parsers.parse('a sala "{room}" está com maintenance_status "yes"'))
+def room_in_maintenance(context, room):
+    db = SessionTest()
+    db.query(Room).filter(Room.name == room).update(
+        {"maintenance_status": RoomMaintenanceStatus.yes}
+    )
+    db.commit()
+    db.close()
+
+@given(parsers.parse('existe uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}" com ID conhecido'))
+def pending_request_known_id(client, context, teacher, room):
     res = client.post(
         "/api/maintenance/",
         params={"teacher_name": teacher},
-        json={"room": "Grad 2", "description": "Some description"}
+        json={"room": room, "description": "Solicitação para excluir"}
     )
     context["request"] = res.json()
 
-@given(parsers.parse('o professor "{teacher}" possui uma solicitação com status "Pendente", ID "{id}" e com a descrição "{description}"'))
-def teacher_has_pending_request_with_description(client, context, teacher, id, description):
+@given(parsers.parse('existe uma solicitação com status "confirmed" do professor "{teacher}" para a sala "{room}" com ID conhecido'))
+def confirmed_request_known_id(client, context, teacher, room):
     res = client.post(
         "/api/maintenance/",
         params={"teacher_name": teacher},
-        json={"room": "Grad 2", "description": description}
-    )
-    context["request"] = res.json()
-
-@given(parsers.parse('o professor "{teacher}" possui uma solicitação com status "Confirmada", ID "{id}" e com a descrição "{description}"'))
-def teacher_has_confirmed_request(client, context, teacher, id, description):
-    res = client.post(
-        "/api/maintenance/",
-        params={"teacher_name": teacher},
-        json={"room": "Grad 2", "description": description}
+        json={"room": room, "description": "Solicitação confirmada"}
     )
     request = res.json()
     db = SessionTest()
@@ -124,117 +126,130 @@ def teacher_has_confirmed_request(client, context, teacher, id, description):
     db.close()
     context["request"] = request
 
-@given(parsers.parse('a sala "{room}" está em manutenção'))
-def room_in_maintenance(context, room):
+@given(parsers.parse('existe uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}" com description "{description}" e ID conhecido'))
+def pending_request_with_description(client, context, teacher, room, description):
+    res = client.post(
+        "/api/maintenance/",
+        params={"teacher_name": teacher},
+        json={"room": room, "description": description}
+    )
+    context["request"] = res.json()
+
+@given(parsers.parse('existe uma solicitação com status "confirmed" do professor "{teacher}" para a sala "{room}" com description "{description}" e ID conhecido'))
+def confirmed_request_with_description(client, context, teacher, room, description):
+    res = client.post(
+        "/api/maintenance/",
+        params={"teacher_name": teacher},
+        json={"room": room, "description": description}
+    )
+    request = res.json()
     db = SessionTest()
-    db.query(Room).filter(Room.name == room).update(
-        {"maintenance_status": RoomMaintenanceStatus.yes}
+    db.query(MaintenanceRequest).filter(MaintenanceRequest.id == request["id"]).update(
+        {"status": MaintenanceStatus.confirmed}
     )
     db.commit()
     db.close()
+    context["request"] = request
 
-@when(parsers.parse('o professor informa "{room}" no campo "Nome da sala"'))
-def inform_room(context, room):
-    context["room"] = room
+# ── Whens ─────────────────────────────────────────────────────────────────────
 
-@when(parsers.parse('o professor informa "{description}" no campo "Descrição"'))
-def inform_description(context, description):
-    context["description"] = description
-
-@when(parsers.parse('o professor informa "{room}" no campo "Nome da sala", mas sem descrição'))
-def inform_room_without_description(context, room):
-    context["room"] = room
-    context["description"] = None
-
-@when(parsers.parse('o professor não informa nada no campo "Descrição"'))
-def inform_no_description(context):
-    context["description"] = None
-
-@when("o professor submete a solicitação")
-def submit_request(client, context):
-    body = {
-        "room": context.get("room"),
-        "description": context.get("description")
-    }
+@when(parsers.parse('uma requisição "POST" for enviada para "/api/maintenance/" com teacher_name "{teacher}", room "{room}" e description "{description}"'))
+def post_request(client, context, teacher, room, description):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_name": context["teacher"]},
-        json=body
+        params={"teacher_name": teacher},
+        json={"room": room, "description": description}
+    )
+    context["response"] = res
+    
+@when(parsers.parse('uma requisição "POST" for enviada para "/api/maintenance/" com teacher_name "{teacher}", room "{room}" e description ""'))
+def post_request_empty_description(client, context, teacher, room):
+    res = client.post(
+        "/api/maintenance/",
+        params={"teacher_name": teacher},
+        json={"room": room, "description": ""}
     )
     context["response"] = res
 
-@when(parsers.parse('o professor requisita a exclusão dessa solicitação pelo seu ID "{id}"'))
-def delete_request(client, context, id):
+@when(parsers.parse('uma requisição "POST" for enviada para "/api/maintenance/" com teacher_name "{teacher}", room "{room}" e description com "{length}" caracteres'))
+def post_request_long_description(client, context, teacher, room, length):
+    res = client.post(
+        "/api/maintenance/",
+        params={"teacher_name": teacher},
+        json={"room": room, "description": "a" * int(length)}
+    )
+    context["response"] = res
+
+@when(parsers.parse('uma requisição "DELETE" for enviada para "/api/maintenance/{id}"'))
+def delete_request(client, context):
     request_id = context["request"]["id"]
     res = client.delete(f"/api/maintenance/{request_id}")
     context["response"] = res
 
-@when(parsers.parse('o professor edita a solicitação pelo seu ID "{id}" informando "{new_description}" no campo "Descrição"'))
-def edit_request(client, context, id, new_description):
+@when(parsers.parse('uma requisição "PUT" for enviada para "/api/maintenance/{id}" com description "{new_description}"'))
+def put_request(client, context, new_description):
     request_id = context["request"]["id"]
     res = client.put(
         f"/api/maintenance/{request_id}",
         json={"description": new_description}
     )
     context["response"] = res
-    context["new_description"] = new_description
 
-@when("o professor submete a edição")
-def submit_edit(context):
-    pass
+# ── Thens ─────────────────────────────────────────────────────────────────────
 
-@when(parsers.parse('o professor informa uma descrição com {length:d} caracteres no campo "Descrição"'))
-def inform_long_description(context, length):
-    context["description"] = "a" * length
+@then(parsers.parse('o status da resposta deve ser "{status_code}"'))
+def check_status_code(context, status_code):
+    assert context["response"].status_code == int(status_code)
 
-@then('o sistema registra a solicitação com status "Pendente" associada ao professor autenticado')
-def verify_request_created(context):
-    assert context["response"].status_code == 201
-    assert context["response"].json()["status"] == "pending"
+@then(parsers.parse('o JSON da resposta deve conter status "{status}", room "{room}" e teacher_name "{teacher}"'))
+def check_response_json(context, status, room, teacher):
+    body = context["response"].json()
+    assert body["status"] == status
+    assert body["room"] == room
+    assert body["teacher_name"] == teacher
 
-@then("o sistema retorna confirmação de sucesso")
-def verify_success(context):
-    assert context["response"].status_code == 201
-
-@then("o sistema não registra a solicitação")
-def verify_not_created(context):
-    assert context["response"].status_code in [400, 404, 422]
-
-@then(parsers.parse('o sistema retorna mensagem de erro "{message}"'))
-def verify_error_message(context, message):
-    assert message in context["response"].json().get("detail", "")
-
-@then(parsers.parse('o sistema exibe a mensagem de erro "{message}"'))
-def verify_display_error(context, message):
-    response_data = context["response"].json()
-    detail = response_data.get("detail", "")
+@then(parsers.parse('o JSON da resposta deve conter a mensagem de erro "{message}"'))
+def check_error_message(context, message):
+    body = context["response"].json()
+    detail = body.get("detail", "")
     if isinstance(detail, list):
         messages = [err.get("msg", "") for err in detail]
         assert any(message in msg for msg in messages)
     else:
         assert message in detail
 
-@then("a solicitação não está mais visível para o professor")
-def verify_request_removed(client, context):
+@then(parsers.parse('o JSON da resposta deve conter description "{description}"'))
+def check_description(context, description):
+    assert context["response"].json()["description"] == description
+
+@then(parsers.parse('o MaintenanceService não retorna mais essa solicitação para o professor "{teacher}"'))
+def check_request_removed(client, context, teacher):
     listing = client.get(
         "/api/maintenance/my-requests",
-        params={"teacher_name": context["teacher"]}
+        params={"teacher_name": teacher}
     )
     ids = [s["id"] for s in listing.json()]
     assert context["request"]["id"] not in ids
 
-@then("o sistema retorna confirmação de exclusão")
-def verify_deletion_confirmed(context):
-    assert context["response"].status_code == 204
+# ── Testes Unitários ──────────────────────────────────────────────────────────
 
-@then(parsers.parse('a solicitação passa a exibir a descrição "{new_description}"'))
-def verify_updated_description(context, new_description):
-    assert context["response"].json()["description"] == new_description
+def test_unitario_schema_rejeita_descricao_vazia():
+    with pytest.raises(Exception):
+        MaintenanceRequestCreate(room="Grad 2", description="")
 
-@then("o sistema retorna confirmação de edição")
-def verify_edit_confirmed(context):
-    assert context["response"].status_code == 200
+def test_unitario_schema_rejeita_descricao_nula():
+    with pytest.raises(Exception):
+        MaintenanceRequestCreate(room="Grad 2", description=None)
 
-@then("o sistema não exclui a solicitação")
-def verify_not_deleted(context):
-    assert context["response"].status_code == 400
+def test_unitario_schema_rejeita_descricao_acima_de_500_caracteres():
+    with pytest.raises(Exception):
+        MaintenanceRequestCreate(room="Grad 2", description="a" * 501)
+
+def test_unitario_schema_aceita_descricao_valida():
+    obj = MaintenanceRequestCreate(room="Grad 2", description="Ar-condicionado com defeito")
+    assert obj.room == "Grad 2"
+    assert obj.description == "Ar-condicionado com defeito"
+
+def test_unitario_schema_rejeita_descricao_so_espacos():
+    with pytest.raises(Exception):
+        MaintenanceRequestCreate(room="Grad 2", description="     ")
