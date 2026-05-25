@@ -3,24 +3,18 @@ from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from models.maintenance import MaintenanceRequest, MaintenanceStatus
+from models.room import Room, RoomMaintenanceStatus
 from schemas.maintenance import MaintenanceRequestCreate, MaintenanceRequestUpdate, MaintenanceRequestResponse
-
-try:
-    from models.room import Room
-    ROOM_MODEL_AVAILABLE = True
-except ImportError:
-    ROOM_MODEL_AVAILABLE = False
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
 @router.post("/", response_model=MaintenanceRequestResponse, status_code=201)
 def create_request(data: MaintenanceRequestCreate, teacher_name: str, db: Session = Depends(get_db)):
-    if ROOM_MODEL_AVAILABLE:
-        room = db.query(Room).filter(Room.name == data.room).first()
-        if not room:
-            raise HTTPException(status_code=404, detail="Sala não encontrada")
-        if room.in_maintenance:
-            raise HTTPException(status_code=400, detail="Sala em manutenção")
+    room = db.query(Room).filter(Room.name == data.room).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    if room.maintenance_status == RoomMaintenanceStatus.yes:
+        raise HTTPException(status_code=400, detail="Sala em manutenção")
 
     existing = db.query(MaintenanceRequest).filter(
         MaintenanceRequest.room == data.room,
