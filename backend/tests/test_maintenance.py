@@ -82,19 +82,18 @@ def client():
 def context():
     return {}
 
-@given(parsers.parse('o sistema não possui solicitação pendente do professor "{teacher}" para a sala "{room}"'))
-def no_pending_request(teacher, room):
+@given(parsers.parse('o sistema não possui solicitação pendente do professor "{teacher}" com CPF "{cpf}" para a sala "{room}"'))
+def no_pending_request(teacher, cpf, room):
     pass
 
-@given(parsers.parse('já existe uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}"'))
-def existing_pending_request(client, context, teacher, room):
+@given(parsers.parse('já existe uma solicitação com status "pending" do professor "{teacher}" com CPF "{cpf}" para a sala "{room}"'))
+def existing_pending_request(client, context, teacher, cpf, room):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": "Solicitação existente"}
     )
     context["existing_request"] = res.json()
-
 @given(parsers.parse('o sistema não possui nenhuma sala com nome "{room}"'))
 def no_room(room):
     pass
@@ -108,20 +107,20 @@ def room_in_maintenance(context, room):
     db.commit()
     db.close()
 
-@given(parsers.parse('o sistema possui uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}"'))
-def pending_request_known_id(client, context, teacher, room):
+@given(parsers.parse('o sistema possui uma solicitação com status "pending" do professor "{teacher}" com CPF "{cpf}" para a sala "{room}"'))
+def pending_request_known_id(client, context, teacher, cpf, room):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": "Solicitação para excluir"}
     )
     context["request"] = res.json()
 
-@given(parsers.parse('o sistema possui uma solicitação com status "confirmed" do professor "{teacher}" para a sala "{room}"'))
-def confirmed_request_known_id(client, context, teacher, room):
+@given(parsers.parse('o sistema possui uma solicitação com status "confirmed" do professor "{teacher}" com CPF "{cpf}" para a sala "{room}"'))
+def confirmed_request_known_id(client, context, teacher, cpf, room):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": "Solicitação confirmada"}
     )
     request = res.json()
@@ -133,20 +132,20 @@ def confirmed_request_known_id(client, context, teacher, room):
     db.close()
     context["request"] = request
 
-@given(parsers.parse('o sistema possui uma solicitação com status "pending" do professor "{teacher}" para a sala "{room}" com descrição "{description}"'))
-def pending_request_with_description(client, context, teacher, room, description):
+@given(parsers.parse('o sistema possui uma solicitação com status "pending" do professor "{teacher}" com CPF "{cpf}" para a sala "{room}" com descrição "{description}"'))
+def pending_request_with_description(client, context, teacher, cpf, room, description):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": description}
     )
     context["request"] = res.json()
 
-@given(parsers.parse('o sistema possui uma solicitação com status "confirmed" do professor "{teacher}" para a sala "{room}" com descrição "{description}"'))
-def confirmed_request_with_description(client, context, teacher, room, description):
+@given(parsers.parse('o sistema possui uma solicitação com status "confirmed" do professor "{teacher}" com CPF "{cpf}" para a sala "{room}" com descrição "{description}"'))
+def confirmed_request_with_description(client, context, teacher, cpf, room, description):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": description}
     )
     request = res.json()
@@ -158,30 +157,54 @@ def confirmed_request_with_description(client, context, teacher, room, descripti
     db.close()
     context["request"] = request
 
-@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" para a sala "{room}" com descrição "{description}"'))
-def post_request(client, context, teacher, room, description):
+@given(parsers.parse('o sistema possui um usuário do tipo "{tipo}" com CPF "{cpf}"'))
+def user_with_role(context, tipo, cpf):
+    db = SessionTest()
+    role = UserRole.DISCENTE if tipo == "discente" else UserRole.DOCENTE
+    db.add(User(
+        nome="Usuario Teste",
+        cpf=cpf,
+        senha="senha123",
+        tipo=role,
+        status=True,
+    ))
+    db.commit()
+    db.close()
+    context["cpf"] = cpf
+
+@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" com CPF "{cpf}" para a sala "{room}" com descrição "{description}"'))
+def post_request(client, context, teacher, cpf, room, description):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": description}
     )
     context["response"] = res
 
-@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" para a sala "{room}" sem descrição'))
-def post_request_empty_description(client, context, teacher, room):
+@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" com CPF "{cpf}" para a sala "{room}" sem descrição'))
+def post_request_empty_description(client, context, teacher, cpf, room):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": ""}
     )
     context["response"] = res
 
-@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" para a sala "{room}" com descrição de {length:d} caracteres'))
-def post_request_long_description(client, context, teacher, room, length):
+@when(parsers.parse('o sistema recebe uma solicitação do professor "{teacher}" com CPF "{cpf}" para a sala "{room}" com descrição de {length:d} caracteres'))
+def post_request_long_description(client, context, teacher, cpf, room, length):
     res = client.post(
         "/api/maintenance/",
-        params={"teacher_cpf": "11111111111"},
+        params={"teacher_cpf": cpf},
         json={"room": room, "description": "a" * length}
+    )
+    context["response"] = res
+
+@when(parsers.parse('o sistema recebe uma solicitação do CPF "{cpf}" para a sala "{room}" com descrição "{description}"'))
+def post_request_by_cpf(client, context, cpf, room, description):
+    res = client.post(
+        "/api/maintenance/",
+        params={"teacher_cpf": cpf},
+        json={"room": room, "description": description}
     )
     context["response"] = res
 
@@ -215,7 +238,7 @@ def check_success(context):
 
 @then('o sistema não registra a solicitação')
 def check_not_created(context):
-    assert context["response"].status_code in [400, 404, 422]
+    assert context["response"].status_code in [400, 403, 404, 422]
 
 @then(parsers.parse('o sistema retorna o erro "{message}"'))
 def check_error_message(context, message):
@@ -231,11 +254,11 @@ def check_error_message(context, message):
 def check_deletion_success(context):
     assert context["response"].status_code == 204
 
-@then(parsers.parse('o sistema não retorna mais essa solicitação para o professor "{teacher}"'))
-def check_request_removed(client, context, teacher):
+@then(parsers.parse('o sistema não retorna mais essa solicitação para o professor "{teacher}" com CPF "{cpf}"'))
+def check_request_removed(client, context, teacher, cpf):
     listing = client.get(
         "/api/maintenance/my-requests",
-        params={"teacher_cpf": "11111111111"}
+        params={"teacher_cpf": cpf}
     )
     ids = [s["id"] for s in listing.json()]
     assert context["request"]["id"] not in ids
