@@ -1,6 +1,6 @@
 """
 Testes BDD — Feature 7: Efetuar reserva e manutencao de reservas (usuario)
-Aluno: Artur Vinicius Pereira Fernandes | Persona BDD: Carlos Drummond
+Aluno: Artur Vinicius Pereira Fernandes
 
 Rodar:
     cd backend && pytest tests/test_reservation.py -v
@@ -18,9 +18,11 @@ from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 import models.reservation
-from models.reservation import Reservation, ReservationStatus
 import models.room
+import models.user
+from models.reservation import Reservation, ReservationStatus
 from models.room import Room, RoomMaintenanceStatus
+from models.user import User, UserRole
 from main import app
 
 # ── Banco em memoria ──────────────────────────────────────────────────────────
@@ -52,6 +54,7 @@ def create_tables():
     yield
     Base.metadata.drop_all(bind=engine_test)
 
+
 @pytest.fixture(autouse=True)
 def clean_database():
     db = SessionTest()
@@ -77,9 +80,9 @@ def clean_database():
     db.commit()
     db.close()
 
+
 @pytest.fixture(autouse=True)
 def ensure_db_override():
-    """Garante que o override do banco esta ativo antes de cada teste."""
     app.dependency_overrides[get_db] = override_get_db
     yield
 
@@ -109,11 +112,45 @@ def _normalize(text: str) -> str:
     return unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode("ascii").lower()
 
 
-def _insert_reservation(user_cpf, user_name, room, start, end, status):
+_TIPO_MAP = {
+    "discente": UserRole.DISCENTE,
+    "docente": UserRole.DOCENTE,
+    "admin": UserRole.ADMIN,
+}
+
+_MAINTENANCE_MAP = {
+    "Sim": RoomMaintenanceStatus.yes,
+    "Não": RoomMaintenanceStatus.no,
+    "Agendada": RoomMaintenanceStatus.scheduled,
+}
+
+STATUS_MAP = {
+    "pending": ReservationStatus.pending,
+    "confirmed": ReservationStatus.confirmed,
+    "denied": ReservationStatus.denied,
+    "completed": ReservationStatus.completed,
+}
+
+
+def _insert_user(cpf: str, tipo: str, ativo: bool = True) -> None:
+    db = SessionTest()
+    if db.query(User).filter(User.cpf == cpf).first() is None:
+        db.add(User(
+            nome=f"Usuario {cpf}",
+            cpf=cpf,
+            status=ativo,
+            senha="senha_hash",
+            tipo=_TIPO_MAP[tipo],
+        ))
+        db.commit()
+    db.close()
+
+
+def _insert_reservation(user_cpf, room, start, end, status):
     db = SessionTest()
     r = Reservation(
         user_cpf=user_cpf,
-        user_name=user_name,
+        user_name=f"Usuario {user_cpf}",
         room=room,
         start_time=_parse_dt(start),
         end_time=_parse_dt(end),
@@ -127,63 +164,84 @@ def _insert_reservation(user_cpf, user_name, room, start, end, status):
     return rid
 
 
-STATUS_MAP = {
-    "pending": ReservationStatus.pending,
-    "confirmed": ReservationStatus.confirmed,
-    "denied": ReservationStatus.denied,
-    "completed": ReservationStatus.completed,
-}
-
 # ── Steps: GIVEN ──────────────────────────────────────────────────────────────
 
-@given(parsers.parse('Carlos Drummond esta autenticado no sistema com CPF "{cpf}"'))
-def carlos_autenticado(context, cpf):
-    context["user_cpf"] = cpf
-    context["user_name"] = "Carlos Drummond"
+@given(parsers.parse('o sistema tem um usuario com CPF "{cpf}" e tipo "{tipo}"'))
+def sistema_tem_usuario(cpf, tipo):
+    _insert_user(cpf, tipo)
 
 
-@given(parsers.parse('a sala "{room}" nao possui reserva confirmada no dia "{date}" entre "{hi}" e "{hf}"'))
-def no_confirmed_reservation(room, date, hi, hf):
+@given(parsers.parse('o sistema tem um usuario com CPF "{cpf}"'))
+def sistema_tem_usuario_sem_tipo(cpf):
+    _insert_user(cpf, "discente")
+
+
+@given(parsers.parse('o sistema nao possui um usuario com CPF "{cpf}"'))
+def sistema_nao_possui_usuario(**_):
     pass
 
 
-@given(parsers.parse('ja existe uma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
-def existing_confirmed_reservation(room, start, end):
-    _insert_reservation("00000000000", "Outro Usuario", room, start, end, ReservationStatus.confirmed)
+@given(parsers.parse('a conta do usuario com CPF "{cpf}" esta desativada'))
+def conta_desativada(cpf):
+    db = SessionTest()
+    user = db.query(User).filter(User.cpf == cpf).first()
+    user.status = False
+    db.commit()
+    db.close()
 
 
-@given(parsers.parse('Carlos possui uma reserva pendente da sala "{room}" das "{start}" as "{end}"'))
-def carlos_pending_reservation(context, room, start, end):
-    rid = _insert_reservation(
-        context.get("user_cpf", "12345678901"),
-        context.get("user_name", "Carlos Drummond"),
-        room, start, end, ReservationStatus.pending,
-    )
+@given(parsers.parse('o sistema nao tem nenhuma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
+def sistema_sem_reserva_confirmada(room, start, end):
+    pass
+
+
+@given(parsers.parse('o sistema possui uma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
+def sistema_possui_reserva_confirmada(room, start, end):
+    _insert_reservation("00000000000", room, start, end, ReservationStatus.confirmed)
+
+
+@given(parsers.parse('o sistema possui uma reserva pendente da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
+def sistema_possui_reserva_pendente(context, room, start, end, cpf):
+    rid = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
     context["reservation_id"] = rid
 
 
-@given(parsers.parse('Carlos possui uma reserva com status "{st}" da sala "{room}" das "{start}" as "{end}"'))
-def carlos_reservation_status(context, st, room, start, end):
-    rid = _insert_reservation(
-        context.get("user_cpf", "12345678901"),
-        context.get("user_name", "Carlos Drummond"),
-        room, start, end, STATUS_MAP[st],
-    )
+@given(parsers.parse('o sistema possui uma reserva pendente de ID {rid:d} da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
+def sistema_possui_reserva_pendente_id(context, rid, room, start, end, cpf):
+    real_id = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
+    context["reservation_id"] = real_id
+    context["feature_id"] = rid
+
+
+@given(parsers.parse('o sistema possui uma reserva de ID {rid:d} com status "{st}" da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
+def sistema_possui_reserva_id_status(context, rid, st, room, start, end, cpf):
+    real_id = _insert_reservation(cpf, room, start, end, STATUS_MAP[st])
+    context["reservation_id"] = real_id
+    context["feature_id"] = rid
+
+
+@given(parsers.parse('o sistema possui uma reserva com status "{st}" da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
+def sistema_possui_reserva_status(context, st, room, start, end, cpf):
+    rid = _insert_reservation(cpf, room, start, end, STATUS_MAP[st])
     context["reservation_id"] = rid
 
 
-@given(parsers.parse('outro usuario com CPF "{other_cpf}" possui uma reserva pendente da sala "{room}" das "{start}" as "{end}"'))
-def other_user_pending(other_cpf, room, start, end):
-    _insert_reservation(other_cpf, "Outro Usuario", room, start, end, ReservationStatus.pending)
+@given(parsers.parse('o sistema tem a sala "{room}" com status de manutencao "{manutencao}"'))
+def sistema_sala_manutencao(room, manutencao):
+    db = SessionTest()
+    sala = db.query(Room).filter(Room.name == room).first()
+    sala.maintenance_status = _MAINTENANCE_MAP[manutencao]
+    db.commit()
+    db.close()
 
 
 # ── Steps: WHEN ──────────────────────────────────────────────────────────────
 
-@when(parsers.parse('Carlos reserva a sala "{room}" das "{start}" as "{end}"'))
-def carlos_reserva(client, context, room, start, end):
+@when(parsers.parse('o usuario com CPF "{cpf}" tenta reservar a sala "{room}" das "{start}" as "{end}"'))
+def usuario_tenta_reservar(client, context, cpf, room, start, end):
     r = client.post(
         "/api/reservations/",
-        params={"user_cpf": context["user_cpf"], "user_name": context["user_name"]},
+        params={"user_cpf": cpf},
         json={"room": room, "start_time": start, "end_time": end},
     )
     context["response"] = r
@@ -191,64 +249,155 @@ def carlos_reserva(client, context, room, start, end):
         context["reservation_id"] = r.json()["id"]
 
 
-@when(parsers.parse('Carlos tenta reservar a sala "{room}" das "{start}" as "{end}"'))
-def carlos_tenta_reservar(client, context, room, start, end):
-    r = client.post(
-        "/api/reservations/",
-        params={"user_cpf": context.get("user_cpf", "12345678901"),
-                "user_name": context.get("user_name", "Carlos Drummond")},
-        json={"room": room, "start_time": start, "end_time": end},
-    )
-    context["response"] = r
-
-
-@when(parsers.parse('Carlos edita o horario de fim para "{new_end}"'))
-def carlos_edita_fim(client, context, new_end):
+@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
+def usuario_tenta_editar_fim(client, context, cpf, new_end, **_):
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": context["user_cpf"]},
+        params={"user_cpf": cpf},
         json={"end_time": new_end},
     )
     context["response"] = r
 
 
-@when("Carlos cancela a reserva")
-def carlos_cancela(client, context):
-    r = client.delete(
+@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
+def usuario_tenta_editar_sala(client, context, cpf, new_room, **_):
+    r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": context["user_cpf"]},
+        params={"user_cpf": cpf},
+        json={"room": new_room},
     )
     context["response"] = r
 
 
-@when("Carlos tenta cancelar a reserva")
-def carlos_tenta_cancelar(client, context):
-    carlos_cancela(client, context)
+@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
+def usuario_tenta_editar_sala_e_fim(client, context, cpf, new_room, new_end, **_):
+    r = client.put(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+        json={"room": new_room, "end_time": new_end},
+    )
+    context["response"] = r
 
 
+@when(parsers.parse('o usuario com CPF "{cpf}" tenta cancelar a reserva de ID {_rid:d}'))
+def usuario_tenta_cancelar_id(client, context, cpf, **_):
+    r = client.delete(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+    )
+    context["response"] = r
 
 
 # ── Steps: THEN ──────────────────────────────────────────────────────────────
 
-@then(parsers.parse('a reserva e criada com status "{expected}"'))
-def reserva_criada(context, expected):
+@then(parsers.parse('o sistema armazena a reserva com status "{expected_status}"'))
+def sistema_armazena_reserva(context, expected_status):
     r = context["response"]
     assert r.status_code == 201, f"Esperava 201, recebeu {r.status_code}: {r.text}"
-    assert r.json()["status"] == expected
+    assert r.json()["status"] == expected_status
 
 
-@then(parsers.parse('Carlos recebe o erro "{msg}"'))
-def carlos_recebe_erro(context, msg):
+@then(parsers.parse('o sistema armazena a reserva com status "{expected_status}" e tipo "{expected_tipo}"'))
+def sistema_armazena_reserva_tipo(context, expected_status, expected_tipo):
     r = context["response"]
-    assert r.status_code in (400, 403, 404, 422), \
-        f"Esperava 4xx, recebeu {r.status_code}"
-    detail = r.json().get("detail", "")
-    assert _normalize(msg) in _normalize(detail), \
-        f"Esperava '{msg}' em '{detail}'"
+    assert r.status_code == 201, f"Esperava 201, recebeu {r.status_code}: {r.text}"
+    assert r.json()["status"] == expected_status
+    assert r.json()["user_type"] == expected_tipo
 
 
-@then(parsers.parse('a reserva e atualizada com horario de fim "{expected_end}"'))
-def reserva_atualizada(context, expected_end):
+@then(parsers.parse('o sistema armazena a reserva com status "{expected_status}" e CPF "{expected_cpf}"'))
+def sistema_armazena_reserva_cpf(context, expected_status, expected_cpf):
+    r = context["response"]
+    assert r.status_code == 201, f"Esperava 201, recebeu {r.status_code}: {r.text}"
+    assert r.json()["status"] == expected_status
+    assert r.json()["user_cpf"] == expected_cpf
+
+
+@then(parsers.parse('o status do usuario na reserva e "{expected_tipo}"'))
+def status_usuario_na_reserva(context, expected_tipo):
+    assert context["response"].json()["user_type"] == expected_tipo
+
+
+@then(parsers.parse('o servidor retorna um erro informando que a sala ja esta reservada neste periodo'))
+def erro_sala_reservada(context):
+    r = context["response"]
+    assert r.status_code == 400
+    assert "conflito" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que o usuario ja possui uma reserva neste horario'))
+def erro_usuario_conflito(context):
+    r = context["response"]
+    assert r.status_code == 400
+    assert "ja possui uma reserva" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que o usuario nao foi encontrado'))
+def erro_usuario_nao_encontrado(context):
+    r = context["response"]
+    assert r.status_code == 404
+    assert "nao encontrado" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o sistema nao possui nenhuma reserva com CPF "{cpf}"'))
+def sistema_sem_reserva_cpf(cpf):
+    db = SessionTest()
+    count = db.query(Reservation).filter(Reservation.user_cpf == cpf).count()
+    db.close()
+    assert count == 0
+
+
+@then(parsers.parse('o servidor retorna um erro informando que a conta esta desativada'))
+def erro_conta_desativada(context):
+    r = context["response"]
+    assert r.status_code == 403
+    assert "desativada" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que a sala nao foi encontrada'))
+def erro_sala_nao_encontrada(context):
+    r = context["response"]
+    assert r.status_code == 404
+    assert "sala nao encontrada" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que a sala esta em manutencao'))
+def erro_sala_manutencao(context):
+    r = context["response"]
+    assert r.status_code == 400
+    assert "manutencao" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que o usuario nao e dono da reserva'))
+def erro_nao_dono(context):
+    r = context["response"]
+    assert r.status_code == 403
+    assert "nao" in _normalize(r.json().get("detail", "")) and "dono" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que so e possivel editar reservas pendentes'))
+def erro_so_pendentes(context):
+    r = context["response"]
+    assert r.status_code == 400
+    assert "pendentes" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o sistema atualiza a sala da reserva para "{expected_room}"'))
+def sistema_atualiza_sala(context, expected_room):
+    r = context["response"]
+    assert r.status_code == 200, f"Esperava 200, recebeu {r.status_code}: {r.text}"
+    assert r.json()["room"] == expected_room
+
+
+@then(parsers.parse('o sistema atualiza a sala da reserva de ID {_rid:d} para "{expected_room}"'))
+def sistema_atualiza_sala_id(context, expected_room, **_):
+    r = context["response"]
+    assert r.status_code == 200, f"Esperava 200, recebeu {r.status_code}: {r.text}"
+    assert r.json()["room"] == expected_room
+
+
+@then(parsers.parse('o sistema atualiza o horario de fim da reserva para "{expected_end}"'))
+def sistema_atualiza_fim(context, expected_end):
     r = context["response"]
     assert r.status_code == 200, f"Esperava 200, recebeu {r.status_code}: {r.text}"
     assert expected_end[:16] in r.json()["end_time"]
@@ -259,8 +408,8 @@ def status_permanece(context, expected):
     assert context["response"].json()["status"] == expected
 
 
-@then(parsers.parse('a reserva tem status "{expected}"'))
-def reserva_tem_status(context, expected):
+@then(parsers.parse('o sistema marca a reserva com status "{expected}"'))
+def sistema_marca_status(context, expected):
     db = SessionTest()
     r = db.query(Reservation).filter(Reservation.id == context["reservation_id"]).first()
     db.close()

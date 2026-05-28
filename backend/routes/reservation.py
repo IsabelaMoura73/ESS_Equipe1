@@ -1,4 +1,3 @@
-# backend/routes/reservation.py
 from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -22,10 +21,9 @@ router = APIRouter(prefix="/api/reservations", tags=["Reservas de Sala"])
 def create_reservation_endpoint(
     payload: ReservationCreate,
     user_cpf: str = Query(..., description="CPF do usuário"),
-    user_name: str = Query(..., description="Nome do usuário"),
     db: Session = Depends(get_db),
 ) -> ReservationResponse:
-    return create_reservation(db, user_cpf, user_name, payload)
+    return create_reservation(db, user_cpf, payload)
 
 
 @router.put(
