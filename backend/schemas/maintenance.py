@@ -30,6 +30,7 @@ class MaintenanceRequestUpdate(BaseModel):
 
 class MaintenanceRequestResponse(BaseModel):
     id: int
+    teacher_cpf: str
     teacher_name: str
     room: str
     description: str
