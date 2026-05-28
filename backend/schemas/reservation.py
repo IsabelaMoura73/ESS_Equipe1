@@ -14,9 +14,7 @@ class ReservationCreate(BaseModel):
     room: str
     start_time: datetime
     end_time: datetime
-    user_type: Optional[str] = None  # Campo opcional para manter compatibilidade com reservas antigas caso a feature 4 seja implementada depois. Pode ser "student", "teacher" ou nulo.
 
-    # RN-07: nome da sala não pode ser vazio
     @field_validator("room")
     @classmethod
     def validate_room(cls, v: str) -> str:
@@ -24,13 +22,10 @@ class ReservationCreate(BaseModel):
             raise ValueError("O campo Sala é obrigatório")
         return v.strip()
 
-    # Sanidade: fim deve ser depois do início
     @model_validator(mode="after")
     def validate_period(self) -> ReservationCreate:
         if self.end_time <= self.start_time:
-            raise ValueError(
-                "O horário de fim deve ser posterior ao horário de início"
-            )
+            raise ValueError("O horário de fim deve ser posterior ao horário de início")
         return self
 
 
@@ -55,21 +50,17 @@ class ReservationUpdate(BaseModel):
     def validate_period(self) -> ReservationUpdate:
         if self.start_time and self.end_time:
             if self.end_time <= self.start_time:
-                raise ValueError(
-                    "O horário de fim deve ser posterior ao horário de início"
-                )
+                raise ValueError("O horário de fim deve ser posterior ao horário de início")
         return self
 
 
 class ReservationResponse(BaseModel):
-    """
-    Resposta serializada de uma reserva (usada em todos os GET/POST/PUT).
-    Inclui status legível e todos os dados necessários para a UI.
-    """
+    """Resposta serializada de uma reserva."""
 
     id: int
     user_cpf: str
     user_name: str
+    user_type: Optional[str]
     room: str
     start_time: datetime
     end_time: datetime
