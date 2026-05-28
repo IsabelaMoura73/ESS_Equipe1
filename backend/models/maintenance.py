@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, String, Enum, Integer, Date
+from sqlalchemy import Column, String, Enum, Integer, Date, ForeignKey
 from database import Base
 
 class MaintenanceStatus(str, enum.Enum):
@@ -12,6 +12,7 @@ class MaintenanceRequest(Base):
     __tablename__ = "maintenance_requests"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    teacher_cpf = Column(String, ForeignKey("users.cpf"), nullable=False)
     teacher_name = Column(String, nullable=False)
     room = Column(String, nullable=False)
     description = Column(String, nullable=False)

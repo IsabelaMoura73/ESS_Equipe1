@@ -61,13 +61,28 @@ def create_tables():
     yield
     Base.metadata.drop_all(bind=engine_test)
 
+TEACHER_CPF = "111.111.111-11"
+# Hash fixo apenas para satisfazer o campo NOT NULL em testes (não é usado para login)
+_FAKE_HASH = "$2b$12$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
 @pytest.fixture(autouse=True)
 def clean_database():
     db = SessionTest()
     for table in reversed(Base.metadata.sorted_tables):
         db.execute(table.delete())
     db.commit()
-    for nome in ["Sala D003", "Grad 2"]:
+    # Cria usuário docente de teste necessário para a FK teacher_cpf
+    from models.user import User, UserRole
+    db.add(User(
+        nome="Professor Teste",
+        cpf=TEACHER_CPF,
+        status=True,
+        senha=_FAKE_HASH,
+        tipo=UserRole.DOCENTE,
+    ))
+    db.commit()
+    # Cria todas as salas utilizadas nos testes
+    for nome in ["Sala D002", "Sala D003", "Sala D004", "Sala D005", "Grad 2"]:
         db.add(Room(
             name=nome,
             capacity=30,
@@ -103,6 +118,7 @@ def context():
 def _insert_maintenance(room: str, status: MaintenanceStatus = MaintenanceStatus.pending) -> int:
     db = SessionTest()
     req = MaintenanceRequest(
+        teacher_cpf=TEACHER_CPF,
         teacher_name="Professor Teste",
         room=room,
         description="Descrição de teste",
