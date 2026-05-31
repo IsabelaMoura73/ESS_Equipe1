@@ -7,7 +7,35 @@ from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def _validar_cpf(cpf: str) -> bool:
+
+    cpf = "".join(c for c in cpf if c.isdigit())
+
+    if len(cpf) != 11:
+        return False
+
+    #sequencias
+    if cpf == cpf[0] * 11:
+        return False
+
+    #primeiro digito verificador
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    digito1 = (soma * 10 % 11) % 10
+    if digito1 != int(cpf[9]):
+        return False
+
+    #segundo digito verificador
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    digito2 = (soma * 10 % 11) % 10
+    if digito2 != int(cpf[10]):
+        return False
+
+    return True
+
 def criar_usuario_service(user: UserCreate, db: Session) -> User:
+    if not _validar_cpf(user.cpf):
+        raise HTTPException(status_code=422, detail="CPF inválido")
+
     db_user = db.query(User).filter(User.cpf == user.cpf).first()
     if db_user:
         raise HTTPException(status_code=400, detail="CPF já cadastrado")
