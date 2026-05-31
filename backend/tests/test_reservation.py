@@ -255,7 +255,7 @@ def sistema_sem_reserva_confirmada(room, start, end):
 
 @given(parsers.parse('o sistema possui uma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
 def sistema_possui_reserva_confirmada(room, start, end):
-    _insert_reservation("00000000000", room, start, end, ReservationStatus.confirmed)
+    _insert_reservation("00000000191", room, start, end, ReservationStatus.confirmed)
 
 
 @given(parsers.parse('o sistema possui uma reserva pendente da sala "{room}" das "{start}" as "{end}" para {nome}'))
