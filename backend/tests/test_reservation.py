@@ -12,9 +12,11 @@ from database import Base, get_db
 import models.reservation
 import models.room
 import models.user
+import models.maintenance
 from models.reservation import Reservation, ReservationStatus
 from models.room import Room, RoomMaintenanceStatus
 from models.user import User, UserRole
+from models.maintenance import MaintenanceRequest, MaintenanceStatus
 from main import app
 
 # ── Banco em memoria ──────────────────────────────────────────────────────────
@@ -158,14 +160,42 @@ def _insert_reservation(user_cpf, room, start, end, status):
 
 # ── Steps: GIVEN ──────────────────────────────────────────────────────────────
 
+_NOME_CPF: dict[str, str] = {}
+
+
+def _criar_usuario(nome, cpf, senha):
+    _NOME_CPF[nome] = cpf
+    db = SessionTest()
+    if db.query(User).filter(User.cpf == cpf).first() is None:
+        db.add(User(
+            nome=nome,
+            cpf=cpf,
+            status=True,
+            senha=senha,
+            tipo=UserRole.DISCENTE,
+        ))
+        db.commit()
+    db.close()
+
+
+@given(parsers.parse('existe um usuario com nome "{nome}" CPF "{cpf}" e senha "{senha}"'))
+def existe_usuario(nome, cpf, senha):
+    _criar_usuario(nome, cpf, senha)
+
+
+@given(parsers.parse('existe um usuario autenticado com nome "{nome}" CPF "{cpf}" e senha "{senha}"'))
+def existe_usuario_autenticado(nome, cpf, senha):
+    _criar_usuario(nome, cpf, senha)
+
+
+@given(parsers.parse('existe um usuario autenicado com nome "{nome}" CPF "{cpf}" e senha "{senha}"'))
+def existe_usuario_autenicado(nome, cpf, senha):
+    _criar_usuario(nome, cpf, senha)
+
+
 @given(parsers.parse('o sistema tem um usuario com CPF "{cpf}" e tipo "{tipo}"'))
 def sistema_tem_usuario(cpf, tipo):
     _insert_user(cpf, tipo)
-
-
-@given(parsers.parse('o sistema tem um usuario com CPF "{cpf}"'))
-def sistema_tem_usuario_sem_tipo(cpf):
-    _insert_user(cpf, "discente")
 
 
 @given(parsers.parse('o sistema nao possui um usuario com CPF "{cpf}"'))
@@ -182,6 +212,21 @@ def conta_desativada(cpf):
     db.close()
 
 
+@given(parsers.parse('a conta de {nome} esta desativada'))
+def conta_desativada_por_nome(nome):
+    cpf = _NOME_CPF[nome]
+    db = SessionTest()
+    user = db.query(User).filter(User.cpf == cpf).first()
+    user.status = False
+    db.commit()
+    db.close()
+
+
+@given(parsers.parse('a sala "{room}" existe no sistema'))
+def sala_existe_no_sistema(**_):
+    pass
+
+
 @given(parsers.parse('o sistema nao tem nenhuma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
 def sistema_sem_reserva_confirmada(room, start, end):
     pass
@@ -192,30 +237,33 @@ def sistema_possui_reserva_confirmada(room, start, end):
     _insert_reservation("00000000000", room, start, end, ReservationStatus.confirmed)
 
 
-@given(parsers.parse('o sistema possui uma reserva pendente da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
-def sistema_possui_reserva_pendente(context, room, start, end, cpf):
+@given(parsers.parse('o sistema possui uma reserva pendente da sala "{room}" das "{start}" as "{end}" para {nome}'))
+def sistema_possui_reserva_pendente(context, room, start, end, nome):
+    cpf = _NOME_CPF[nome]
     rid = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
     context["reservation_id"] = rid
 
 
-@given(parsers.parse('o sistema possui uma reserva pendente de ID {rid:d} da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
-def sistema_possui_reserva_pendente_id(context, rid, room, start, end, cpf):
+@given(parsers.parse('o sistema possui uma reserva pendente de ID {rid:d} da sala "{room}" das "{start}" as "{end}" para {nome}'))
+def sistema_possui_reserva_pendente_id(context, rid, room, start, end, nome):
+    cpf = _NOME_CPF[nome]
     real_id = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
     context["reservation_id"] = real_id
     context["feature_id"] = rid
 
 
-@given(parsers.parse('o sistema possui uma reserva de ID {rid:d} com status "{st}" da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
-def sistema_possui_reserva_id_status(context, rid, st, room, start, end, cpf):
+@given(parsers.parse('o sistema possui uma reserva de ID {rid:d} com status "{st}" da sala "{room}" das "{start}" as "{end}" para {nome}'))
+def sistema_possui_reserva_id_status(context, rid, st, room, start, end, nome):
+    cpf = _NOME_CPF[nome]
     real_id = _insert_reservation(cpf, room, start, end, STATUS_MAP[st])
     context["reservation_id"] = real_id
     context["feature_id"] = rid
 
 
-@given(parsers.parse('o sistema possui uma reserva com status "{st}" da sala "{room}" das "{start}" as "{end}" para o CPF "{cpf}"'))
-def sistema_possui_reserva_status(context, st, room, start, end, cpf):
-    rid = _insert_reservation(cpf, room, start, end, STATUS_MAP[st])
-    context["reservation_id"] = rid
+@given(parsers.parse('o sistema possui uma reserva pendente fixa da sala "{room}" das "{start}" as "{end}" para {nome}'))
+def sistema_possui_reserva_pendente_fixa(room, start, end, nome):
+    cpf = _NOME_CPF[nome]
+    _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
 
 
 @given(parsers.parse('o sistema tem a sala "{room}" com status de manutencao "{manutencao}"'))
@@ -227,10 +275,43 @@ def sistema_sala_manutencao(room, manutencao):
     db.close()
 
 
+@given(parsers.parse('o sistema tem a sala "{room}" com manutencao agendada de "{start_date}" a "{end_date}"'))
+def sistema_sala_manutencao_agendada(room, start_date, end_date):
+    from datetime import date
+    db = SessionTest()
+    sala = db.query(Room).filter(Room.name == room).first()
+    sala.maintenance_status = RoomMaintenanceStatus.scheduled
+    db.commit()
+    doc_cpf = "00000000001"
+    if db.query(User).filter(User.cpf == doc_cpf).first() is None:
+        db.add(User(nome="Docente Manutencao", cpf=doc_cpf, status=True, senha="senha", tipo=UserRole.DOCENTE))
+        db.commit()
+    db.add(MaintenanceRequest(
+        teacher_cpf=doc_cpf,
+        teacher_name="Docente Manutencao",
+        room=room,
+        description="Manutencao agendada",
+        status=MaintenanceStatus.confirmed,
+        start_date=date.fromisoformat(start_date),
+        end_date=date.fromisoformat(end_date),
+    ))
+    db.commit()
+    db.close()
+
+
 # ── Steps: WHEN ──────────────────────────────────────────────────────────────
 
+@when(parsers.parse('um usuario nao autenticado tenta reservar a sala "{room}" das "{start}" as "{end}"'))
+def usuario_nao_autenticado_tenta_reservar(client, context, room, start, end):
+    r = client.post(
+        "/api/reservations/",
+        json={"room": room, "start_time": start, "end_time": end},
+    )
+    context["response"] = r
+
+
 @when(parsers.parse('o usuario com CPF "{cpf}" tenta reservar a sala "{room}" das "{start}" as "{end}"'))
-def usuario_tenta_reservar(client, context, cpf, room, start, end):
+def usuario_tenta_reservar_por_cpf(client, context, cpf, room, start, end):
     r = client.post(
         "/api/reservations/",
         params={"user_cpf": cpf},
@@ -239,6 +320,62 @@ def usuario_tenta_reservar(client, context, cpf, room, start, end):
     context["response"] = r
     if r.status_code == 201:
         context["reservation_id"] = r.json()["id"]
+
+
+@when(parsers.re(r'o usuario (?P<nome>(?!com CPF|de CPF)\S+) tenta reservar a sala "(?P<room>[^"]+)" das "(?P<start>[^"]+)" as "(?P<end>[^"]+)"'))
+def usuario_tenta_reservar_por_nome(client, context, nome, room, start, end):
+    cpf = _NOME_CPF[nome]
+    r = client.post(
+        "/api/reservations/",
+        params={"user_cpf": cpf},
+        json={"room": room, "start_time": start, "end_time": end},
+    )
+    context["response"] = r
+    if r.status_code == 201:
+        context["reservation_id"] = r.json()["id"]
+
+
+@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
+def usuario_tenta_editar_fim_por_nome(client, context, nome, new_end, **_):
+    cpf = _NOME_CPF[nome]
+    r = client.put(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+        json={"end_time": new_end},
+    )
+    context["response"] = r
+
+
+@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
+def usuario_tenta_editar_sala_por_nome(client, context, nome, new_room, **_):
+    cpf = _NOME_CPF[nome]
+    r = client.put(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+        json={"room": new_room},
+    )
+    context["response"] = r
+
+
+@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
+def usuario_tenta_editar_sala_e_fim_por_nome(client, context, nome, new_room, new_end, **_):
+    cpf = _NOME_CPF[nome]
+    r = client.put(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+        json={"room": new_room, "end_time": new_end},
+    )
+    context["response"] = r
+
+
+@when(parsers.parse('o usuario {nome} tenta cancelar a reserva de ID {_rid:d}'))
+def usuario_tenta_cancelar_por_nome(client, context, nome, **_):
+    cpf = _NOME_CPF[nome]
+    r = client.delete(
+        f"/api/reservations/{context['reservation_id']}",
+        params={"user_cpf": cpf},
+    )
+    context["response"] = r
 
 
 @when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
@@ -308,6 +445,30 @@ def sistema_armazena_reserva_cpf(context, expected_status, expected_cpf):
 @then(parsers.parse('o status do usuario na reserva e "{expected_tipo}"'))
 def status_usuario_na_reserva(context, expected_tipo):
     assert context["response"].json()["user_type"] == expected_tipo
+
+
+@then(parsers.parse('o servidor retorna um erro de autenticacao'))
+def erro_autenticacao(context):
+    r = context["response"]
+    assert r.status_code == 422
+
+
+@then(parsers.parse('o servidor retorna um erro informando que o horario de inicio esta no passado'))
+def erro_inicio_no_passado(context):
+    r = context["response"]
+    assert r.status_code == 400
+    assert "passado" in _normalize(r.json().get("detail", ""))
+
+
+@then(parsers.parse('o servidor retorna um erro informando que o horario de fim deve ser posterior ao inicio'))
+def erro_fim_antes_do_inicio(context):
+    r = context["response"]
+    assert r.status_code in (400, 422)
+    body = r.json()
+    detail = body.get("detail", "")
+    if isinstance(detail, list):
+        detail = " ".join(str(d) for d in detail)
+    assert "posterior" in _normalize(str(detail))
 
 
 @then(parsers.parse('o servidor retorna um erro informando que a sala ja esta reservada neste periodo'))
