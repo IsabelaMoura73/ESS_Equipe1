@@ -2,7 +2,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from models.maintenance import MaintenanceRequest, MaintenanceStatus
 from models.reservation import Reservation, ReservationStatus
 from models.room import Room, RoomMaintenanceStatus
 from models.user import User, UserRole
@@ -30,38 +29,18 @@ def _get_active_user(db: Session, user_cpf: str) -> User:
     return user
 
 
-def _check_room_exists_and_available(
-    db: Session, room_name: str, start: datetime | None = None, end: datetime | None = None
-) -> None:
+def _check_room_exists_and_available(db: Session, room_name: str) -> None:
     room = db.query(Room).filter(Room.name == room_name).first()
     if room is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Sala não encontrada",
         )
-    if room.maintenance_status == RoomMaintenanceStatus.yes:
+    if room.maintenance_status in (RoomMaintenanceStatus.yes, RoomMaintenanceStatus.scheduled):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sala em manutenção ou com manutenção agendada",
         )
-    if room.maintenance_status == RoomMaintenanceStatus.scheduled and start is not None and end is not None:
-        start_date = start.date() if hasattr(start, "date") else start
-        end_date = end.date() if hasattr(end, "date") else end
-        conflict = (
-            db.query(MaintenanceRequest)
-            .filter(
-                MaintenanceRequest.room == room_name,
-                MaintenanceRequest.status == MaintenanceStatus.confirmed,
-                MaintenanceRequest.start_date <= end_date,
-                MaintenanceRequest.end_date >= start_date,
-            )
-            .first()
-        )
-        if conflict:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Sala em manutenção ou com manutenção agendada",
-            )
 
 
 def _check_start_not_in_past(start: datetime) -> None:
@@ -128,7 +107,7 @@ def create_reservation(db: Session, user_cpf: str, data: ReservationCreate) -> R
     user = _get_active_user(db, user_cpf)
     _check_start_not_in_past(data.start_time)
     _check_end_after_start(data.start_time, data.end_time)
-    _check_room_exists_and_available(db, data.room, data.start_time, data.end_time)
+    _check_room_exists_and_available(db, data.room)
     _check_confirmed_conflict(db, data.room, data.start_time, data.end_time)
     _check_user_conflict(db, user_cpf, data.start_time, data.end_time)
     reservation = Reservation(
@@ -163,7 +142,7 @@ def update_reservation(
     if data.start_time is not None:
         _check_start_not_in_past(new_start)
     _check_end_after_start(new_start, new_end)
-    _check_room_exists_and_available(db, new_room, new_start, new_end)
+    _check_room_exists_and_available(db, new_room)
     _check_confirmed_conflict(db, new_room, new_start, new_end, exclude_id=reservation_id)
     _check_user_conflict(db, user_cpf, new_start, new_end, exclude_id=reservation_id)
     reservation.room       = new_room
