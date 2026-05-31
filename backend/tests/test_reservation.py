@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from passlib.context import CryptContext
 from pytest_bdd import given, parsers, scenarios, then, when
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,6 +19,8 @@ from models.room import Room, RoomMaintenanceStatus
 from models.user import User, UserRole
 from models.maintenance import MaintenanceRequest, MaintenanceStatus
 from main import app
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ── Banco em memoria ──────────────────────────────────────────────────────────
 engine_test = create_engine(
@@ -161,6 +164,7 @@ def _insert_reservation(user_cpf, room, start, end, status):
 # ── Steps: GIVEN ──────────────────────────────────────────────────────────────
 
 _NOME_CPF: dict[str, str] = {}
+_NOME_SENHA: dict[str, str] = {}
 
 
 def _criar_usuario(nome, cpf, senha):
@@ -191,6 +195,23 @@ def existe_usuario_autenticado(nome, cpf, senha):
 @given(parsers.parse('existe um usuario autenicado com nome "{nome}" CPF "{cpf}" e senha "{senha}"'))
 def existe_usuario_autenicado(nome, cpf, senha):
     _criar_usuario(nome, cpf, senha)
+
+
+@given(parsers.parse('o sistema tem um usuario com nome "{nome}" CPF "{cpf}" senha "{senha}" e tipo "{tipo}"'))
+def sistema_tem_usuario_completo(nome, cpf, senha, tipo):
+    _NOME_CPF[nome] = cpf
+    _NOME_SENHA[nome] = senha
+    db = SessionTest()
+    if db.query(User).filter(User.cpf == cpf).first() is None:
+        db.add(User(
+            nome=nome,
+            cpf=cpf,
+            status=True,
+            senha=_pwd_context.hash(senha),
+            tipo=_TIPO_MAP[tipo],
+        ))
+        db.commit()
+    db.close()
 
 
 @given(parsers.parse('o sistema tem um usuario com CPF "{cpf}" e tipo "{tipo}"'))
@@ -234,18 +255,18 @@ def sistema_sem_reserva_confirmada(room, start, end):
 
 @given(parsers.parse('o sistema possui uma reserva confirmada da sala "{room}" das "{start}" as "{end}"'))
 def sistema_possui_reserva_confirmada(room, start, end):
-    _insert_reservation("00000000000", room, start, end, ReservationStatus.confirmed)
+    _insert_reservation("00000000191", room, start, end, ReservationStatus.confirmed)
 
 
 @given(parsers.parse('o sistema possui uma reserva pendente da sala "{room}" das "{start}" as "{end}" para {nome}'))
-def sistema_possui_reserva_pendente(context, room, start, end, nome):
+def sistema_possui_reserva_pendente_nome(context, room, start, end, nome):
     cpf = _NOME_CPF[nome]
     rid = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
     context["reservation_id"] = rid
 
 
 @given(parsers.parse('o sistema possui uma reserva pendente de ID {rid:d} da sala "{room}" das "{start}" as "{end}" para {nome}'))
-def sistema_possui_reserva_pendente_id(context, rid, room, start, end, nome):
+def sistema_possui_reserva_pendente_id_nome(context, rid, room, start, end, nome):
     cpf = _NOME_CPF[nome]
     real_id = _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
     context["reservation_id"] = real_id
@@ -253,7 +274,7 @@ def sistema_possui_reserva_pendente_id(context, rid, room, start, end, nome):
 
 
 @given(parsers.parse('o sistema possui uma reserva de ID {rid:d} com status "{st}" da sala "{room}" das "{start}" as "{end}" para {nome}'))
-def sistema_possui_reserva_id_status(context, rid, st, room, start, end, nome):
+def sistema_possui_reserva_id_status_nome(context, rid, st, room, start, end, nome):
     cpf = _NOME_CPF[nome]
     real_id = _insert_reservation(cpf, room, start, end, STATUS_MAP[st])
     context["reservation_id"] = real_id
@@ -261,7 +282,7 @@ def sistema_possui_reserva_id_status(context, rid, st, room, start, end, nome):
 
 
 @given(parsers.parse('o sistema possui uma reserva pendente fixa da sala "{room}" das "{start}" as "{end}" para {nome}'))
-def sistema_possui_reserva_pendente_fixa(room, start, end, nome):
+def sistema_possui_reserva_pendente_fixa_nome(room, start, end, nome):
     cpf = _NOME_CPF[nome]
     _insert_reservation(cpf, room, start, end, ReservationStatus.pending)
 
@@ -310,24 +331,13 @@ def usuario_nao_autenticado_tenta_reservar(client, context, room, start, end):
     context["response"] = r
 
 
-@when(parsers.parse('o usuario com CPF "{cpf}" tenta reservar a sala "{room}" das "{start}" as "{end}"'))
-def usuario_tenta_reservar_por_cpf(client, context, cpf, room, start, end):
-    r = client.post(
-        "/api/reservations/",
-        params={"user_cpf": cpf},
-        json={"room": room, "start_time": start, "end_time": end},
-    )
-    context["response"] = r
-    if r.status_code == 201:
-        context["reservation_id"] = r.json()["id"]
-
-
-@when(parsers.re(r'o usuario (?P<nome>(?!com CPF|de CPF)\S+) tenta reservar a sala "(?P<room>[^"]+)" das "(?P<start>[^"]+)" as "(?P<end>[^"]+)"'))
+@when(parsers.re(r'^(?P<nome>\S+) tenta reservar a sala "(?P<room>[^"]+)" das "(?P<start>[^"]+)" as "(?P<end>[^"]+)"$'))
 def usuario_tenta_reservar_por_nome(client, context, nome, room, start, end):
     cpf = _NOME_CPF[nome]
+    senha = _NOME_SENHA[nome]
     r = client.post(
         "/api/reservations/",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"room": room, "start_time": start, "end_time": end},
     )
     context["response"] = r
@@ -335,84 +345,101 @@ def usuario_tenta_reservar_por_nome(client, context, nome, room, start, end):
         context["reservation_id"] = r.json()["id"]
 
 
-@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
+@when(parsers.parse('o usuario com CPF "{cpf}" nome "{nome}" e senha "{senha}" tenta reservar a sala "{room}" das "{start}" as "{end}"'))
+def usuario_tenta_reservar_por_cpf(client, context, cpf, nome, senha, room, start, end):
+    r = client.post(
+        "/api/reservations/",
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
+        json={"room": room, "start_time": start, "end_time": end},
+    )
+    context["response"] = r
+    if r.status_code == 201:
+        context["reservation_id"] = r.json()["id"]
+
+
+
+@when(parsers.parse('{nome} tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
 def usuario_tenta_editar_fim_por_nome(client, context, nome, new_end, **_):
     cpf = _NOME_CPF[nome]
+    senha = _NOME_SENHA[nome]
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"end_time": new_end},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
+@when(parsers.parse('{nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
 def usuario_tenta_editar_sala_por_nome(client, context, nome, new_room, **_):
     cpf = _NOME_CPF[nome]
+    senha = _NOME_SENHA[nome]
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"room": new_room},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario {nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
+@when(parsers.parse('{nome} tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
 def usuario_tenta_editar_sala_e_fim_por_nome(client, context, nome, new_room, new_end, **_):
     cpf = _NOME_CPF[nome]
+    senha = _NOME_SENHA[nome]
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"room": new_room, "end_time": new_end},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario {nome} tenta cancelar a reserva de ID {_rid:d}'))
+@when(parsers.parse('{nome} tenta cancelar a reserva de ID {_rid:d}'))
 def usuario_tenta_cancelar_por_nome(client, context, nome, **_):
     cpf = _NOME_CPF[nome]
+    senha = _NOME_SENHA[nome]
     r = client.delete(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
-def usuario_tenta_editar_fim(client, context, cpf, new_end, **_):
+@when(parsers.parse('o usuario com CPF "{cpf}" nome "{nome}" e senha "{senha}" tenta editar a reserva de ID {_rid:d} alterando horario de fim para "{new_end}"'))
+def usuario_tenta_editar_fim(client, context, cpf, nome, senha, new_end, **_):
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"end_time": new_end},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
-def usuario_tenta_editar_sala(client, context, cpf, new_room, **_):
+@when(parsers.parse('o usuario com CPF "{cpf}" nome "{nome}" e senha "{senha}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}"'))
+def usuario_tenta_editar_sala(client, context, cpf, nome, senha, new_room, **_):
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"room": new_room},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario com CPF "{cpf}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
-def usuario_tenta_editar_sala_e_fim(client, context, cpf, new_room, new_end, **_):
+@when(parsers.parse('o usuario com CPF "{cpf}" nome "{nome}" e senha "{senha}" tenta editar a reserva de ID {_rid:d} alterando sala para "{new_room}" e horario de fim para "{new_end}"'))
+def usuario_tenta_editar_sala_e_fim(client, context, cpf, nome, senha, new_room, new_end, **_):
     r = client.put(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
         json={"room": new_room, "end_time": new_end},
     )
     context["response"] = r
 
 
-@when(parsers.parse('o usuario com CPF "{cpf}" tenta cancelar a reserva de ID {_rid:d}'))
-def usuario_tenta_cancelar_id(client, context, cpf, **_):
+@when(parsers.parse('o usuario com CPF "{cpf}" nome "{nome}" e senha "{senha}" tenta cancelar a reserva de ID {_rid:d}'))
+def usuario_tenta_cancelar_id(client, context, cpf, nome, senha, **_):
     r = client.delete(
         f"/api/reservations/{context['reservation_id']}",
-        params={"user_cpf": cpf},
+        params={"user_cpf": cpf, "user_nome": nome, "user_senha": senha},
     )
     context["response"] = r
 

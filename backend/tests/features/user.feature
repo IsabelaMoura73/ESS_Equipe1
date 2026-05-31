@@ -6,23 +6,23 @@ Feature: Gerenciamento de usuarios
   #CENARIOS DE CADASTRO
 
   Scenario: Cadastro de discente realizado com sucesso
-    Given o sistema nao tem um usuario com CPF "11122233344"
-    When eu tento cadastrar o usuario "John Logan" com CPF "11122233344", tipo "discente", matricula "20230001", curso "Computacao" e senha "senha123"
-    Then o servidor retorna os dados do usuario "John Logan" com CPF "11122233344" e tipo "discente"
-    And o sistema armazena o usuario "John Logan" com CPF "11122233344" e tipo "discente"
-    And o status do usuario "John Logan" com CPF "11122233344" e ativo
+    Given o sistema nao tem um usuario com CPF "53128925054"
+    When eu tento cadastrar o usuario "John Logan" com CPF "53128925054", tipo "discente", matricula "20230001", curso "Computacao" e senha "senha123"
+    Then o servidor retorna os dados do usuario "John Logan" com CPF "53128925054" e tipo "discente"
+    And o sistema armazena o usuario "John Logan" com CPF "53128925054" e tipo "discente"
+    And o status do usuario "John Logan" com CPF "53128925054" e ativo
 
   Scenario: Cadastro de docente realizado com sucesso
-    Given o sistema nao tem um usuario com CPF "55566677788"
-    When eu tento cadastrar o usuario "Pedro Mota" com CPF "55566677788", tipo "docente", siape "1234567" e senha "senha123"
-    Then o servidor retorna os dados do usuario "Pedro Mota" com CPF "55566677788" e tipo "docente"
-    And o sistema armazena o usuario "Pedro Mota" com CPF "55566677788" e tipo "docente"
+    Given o sistema nao tem um usuario com CPF "53128925054"
+    When eu tento cadastrar o usuario "Pedro Mota" com CPF "53128925054", tipo "docente", siape "1234567" e senha "senha123"
+    Then o servidor retorna os dados do usuario "Pedro Mota" com CPF "53128925054" e tipo "docente"
+    And o sistema armazena o usuario "Pedro Mota" com CPF "53128925054" e tipo "docente"
 
   Scenario: Tentativa de cadastro com CPF ja existente
-    Given o sistema tem um usuario "John Logan" com CPF "11122233344"
-    When eu tento cadastrar o usuario "Fake John" com CPF "11122233344", tipo "discente", matricula "20230002", curso "Direito" e senha "senha123"
+    Given o sistema tem um usuario "John Logan" com CPF "53128925054"
+    When eu tento cadastrar o usuario "Fake John" com CPF "53128925054", tipo "discente", matricula "20230002", curso "Direito" e senha "senha123"
     Then o servidor retorna um erro informando que o CPF ja esta cadastrado
-    And o sistema ainda tem apenas um usuario com CPF "11122233344"
+    And o sistema ainda tem apenas um usuario com CPF "53128925054"
 
   Scenario: Tentativa de cadastro de docente sem SIAPE
     Given o sistema nao tem um usuario com CPF "99988877766"
@@ -51,13 +51,13 @@ Feature: Gerenciamento de usuarios
   #CENARIOS DE LOGIN
 
   Scenario: Login realizado com sucesso
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu realizo o login com CPF "11122233344" e senha "senha123"
-    Then o servidor retorna os dados do usuario "John Logan" com CPF "11122233344"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu realizo o login com CPF "53128925054" e senha "senha123"
+    Then o servidor retorna os dados do usuario "John Logan" com CPF "53128925054"
 
   Scenario: Tentativa de login com senha incorreta
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu realizo o login com CPF "11122233344" e senha "senhaerrada"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu realizo o login com CPF "53128925054" e senha "senhaerrada"
     Then o servidor retorna um erro informando CPF ou senha invalidos
 
   Scenario: Tentativa de login com CPF nao cadastrado
@@ -66,50 +66,50 @@ Feature: Gerenciamento de usuarios
     Then o servidor retorna um erro informando CPF ou senha invalidos
 
   Scenario: Tentativa de login com conta desativada
-    Given o sistema tem um usuario desativado "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu realizo o login com CPF "11122233344" e senha "senha123"
+    Given o sistema tem um usuario desativado "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu realizo o login com CPF "53128925054" e senha "senha123"
     Then o servidor retorna um erro informando que a conta esta desativada
-    And o sistema ainda tem o usuario "John Logan" com CPF "11122233344" com status desativado
+    And o sistema ainda tem o usuario "John Logan" com CPF "53128925054" com status desativado
 
   #CENARIOS DE ATUALIZACAO DE DADOS
 
   Scenario: Alteracao de nome realizada com sucesso
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu atualizo o nome do usuario com CPF "11122233344" para "John Logan Moura"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu atualizo o nome do usuario com CPF "53128925054" para "John Logan Moura"
     Then o servidor retorna os dados atualizados com nome "John Logan Moura"
-    And o sistema armazena o usuario com CPF "11122233344" com nome "John Logan Moura"
+    And o sistema armazena o usuario com CPF "53128925054" com nome "John Logan Moura"
 
   Scenario: Alteracao de senha realizada com sucesso
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu atualizo a senha do usuario com CPF "11122233344" para "novasenha456"
-    Then o servidor retorna os dados do usuario com CPF "11122233344"
-    And o sistema permite login com CPF "11122233344" e senha "novasenha456"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu atualizo a senha do usuario com CPF "53128925054" para "novasenha456"
+    Then o servidor retorna os dados do usuario com CPF "53128925054"
+    And o sistema permite login com CPF "53128925054" e senha "novasenha456"
 
   Scenario: Tentativa de atualizacao com senha nova muito curta
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu tento atualizar a senha do usuario com CPF "11122233344" para "abc"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu tento atualizar a senha do usuario com CPF "53128925054" para "abc"
     Then o servidor retorna um erro de validacao
-    And o sistema permite login com CPF "11122233344" e senha "senha123"
+    And o sistema permite login com CPF "53128925054" e senha "senha123"
 
   #CENARIOS DE DESATIVACAO
 
   Scenario: Desativacao de conta com reservas pendentes e confirmadas
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    And o sistema tem uma reserva com status "pending" associada ao usuario com CPF "11122233344"
-    And o sistema tem uma reserva com status "confirmed" associada ao usuario com CPF "11122233344"
-    When eu solicito a desativacao da conta do usuario com CPF "11122233344"
-    Then o servidor retorna os dados do usuario com CPF "11122233344" com status desativado
-    And o sistema armazena o usuario com CPF "11122233344" com status desativado
-    And o sistema armazena todas as reservas do usuario com CPF "11122233344" com status "denied"
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    And o sistema tem uma reserva com status "pending" associada ao usuario com CPF "53128925054"
+    And o sistema tem uma reserva com status "confirmed" associada ao usuario com CPF "53128925054"
+    When eu solicito a desativacao da conta do usuario com CPF "53128925054"
+    Then o servidor retorna os dados do usuario com CPF "53128925054" com status desativado
+    And o sistema armazena o usuario com CPF "53128925054" com status desativado
+    And o sistema armazena todas as reservas do usuario com CPF "53128925054" com status "denied"
 
   Scenario: Desativacao de conta sem reservas ativas
-    Given o sistema tem um usuario ativo "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu solicito a desativacao da conta do usuario com CPF "11122233344"
-    Then o servidor retorna os dados do usuario com CPF "11122233344" com status desativado
-    And o sistema armazena o usuario com CPF "11122233344" com status desativado
+    Given o sistema tem um usuario ativo "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu solicito a desativacao da conta do usuario com CPF "53128925054"
+    Then o servidor retorna os dados do usuario com CPF "53128925054" com status desativado
+    And o sistema armazena o usuario com CPF "53128925054" com status desativado
 
   Scenario: Tentativa de desativar conta ja desativada
-    Given o sistema tem um usuario desativado "John Logan" com CPF "11122233344" e senha "senha123"
-    When eu solicito a desativacao da conta do usuario com CPF "11122233344"
+    Given o sistema tem um usuario desativado "John Logan" com CPF "53128925054" e senha "senha123"
+    When eu solicito a desativacao da conta do usuario com CPF "53128925054"
     Then o servidor retorna um erro informando que a conta ja esta desativada
-    And o sistema armazena o usuario com CPF "11122233344" com status desativado
+    And o sistema armazena o usuario com CPF "53128925054" com status desativado

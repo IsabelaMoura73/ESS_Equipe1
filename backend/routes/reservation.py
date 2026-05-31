@@ -21,9 +21,11 @@ router = APIRouter(prefix="/api/reservations", tags=["Reservas de Sala"])
 def create_reservation_endpoint(
     payload: ReservationCreate,
     user_cpf: str = Query(..., description="CPF do usuário"),
+    user_nome: str = Query(..., description="Nome do usuário"),
+    user_senha: str = Query(..., description="Senha do usuário"),
     db: Session = Depends(get_db),
 ) -> ReservationResponse:
-    return create_reservation(db, user_cpf, payload)
+    return create_reservation(db, user_cpf, user_nome, user_senha, payload)
 
 
 @router.put(
@@ -35,9 +37,11 @@ def update_reservation_endpoint(
     reservation_id: int,
     payload: ReservationUpdate,
     user_cpf: str = Query(..., description="CPF do usuário"),
+    user_nome: str = Query(..., description="Nome do usuário"),
+    user_senha: str = Query(..., description="Senha do usuário"),
     db: Session = Depends(get_db),
 ) -> ReservationResponse:
-    return update_reservation(db, reservation_id, user_cpf, payload)
+    return update_reservation(db, reservation_id, user_cpf, user_nome, user_senha, payload)
 
 
 @router.delete(
@@ -49,6 +53,8 @@ def update_reservation_endpoint(
 def cancel_reservation_endpoint(
     reservation_id: int,
     user_cpf: str = Query(..., description="CPF do usuário"),
+    user_nome: str = Query(..., description="Nome do usuário"),
+    user_senha: str = Query(..., description="Senha do usuário"),
     db: Session = Depends(get_db),
 ) -> None:
-    cancel_reservation(db, reservation_id, user_cpf)
+    cancel_reservation(db, reservation_id, user_cpf, user_nome, user_senha)

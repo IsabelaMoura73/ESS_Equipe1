@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,18 +14,28 @@ import models.equipment
 
 from routes.user import router as user_router
 from routes.maintenance import router as maintenance_router
-from routes.room import router as room_router 
+from routes.room import router as room_router
 from routes.reservation import router as reservation_router
 from routes.maintenance_check import router as maintenance_check_router
 from routes.equipment import router as equipment_router
 from routes.list_reservation import router as list_reservation_router
 from routes.admin_reservation import router as admin_reservation_router
+from services.reservation_scheduler import start_scheduler
 
 Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = start_scheduler()
+    yield
+    scheduler.shutdown()
+
 
 app = FastAPI(
     title="Salla — Sistema de Reserva de Salas",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
