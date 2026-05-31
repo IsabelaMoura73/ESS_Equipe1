@@ -7,9 +7,11 @@ from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def _validar_cpf(cpf: str) -> bool:
+def _normalizar_cpf(cpf: str) -> str:
+    return "".join(c for c in cpf if c.isdigit())
 
-    cpf = "".join(c for c in cpf if c.isdigit())
+def _validar_cpf(cpf: str) -> bool:
+    cpf = _normalizar_cpf(cpf)
 
     if len(cpf) != 11:
         return False
@@ -36,11 +38,14 @@ def criar_usuario_service(user: UserCreate, db: Session) -> User:
     if not _validar_cpf(user.cpf):
         raise HTTPException(status_code=422, detail="CPF inválido")
 
-    db_user = db.query(User).filter(User.cpf == user.cpf).first()
+    cpf_normalizado = _normalizar_cpf(user.cpf)
+
+    db_user = db.query(User).filter(User.cpf == cpf_normalizado).first()
     if db_user:
         raise HTTPException(status_code=400, detail="CPF já cadastrado")
 
     dados = user.model_dump()
+    dados["cpf"] = cpf_normalizado
     dados["senha"] = pwd_context.hash(dados["senha"])
 
     novo_usuario = User(**dados)
@@ -50,7 +55,8 @@ def criar_usuario_service(user: UserCreate, db: Session) -> User:
     return novo_usuario
 
 def login_service(dados: UserLogin, db: Session) -> User:
-    user = db.query(User).filter(User.cpf == dados.cpf).first()
+    cpf_normalizado = _normalizar_cpf(dados.cpf)
+    user = db.query(User).filter(User.cpf == cpf_normalizado).first()
     if not user or not pwd_context.verify(dados.senha, user.senha):
         raise HTTPException(status_code=401, detail="CPF ou senha inválidos")
 
