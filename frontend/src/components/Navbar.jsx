@@ -77,7 +77,14 @@ export default function Navbar({ children }) {
           <Link to="/perfil" style={s.profileLink}>
             <span style={s.avatar}>{initials}</span>
             <div style={s.profileInfo}>
-              <span style={s.profileName}>{user?.nome?.split(" ")[0]} {user?.nome?.split(" ").slice(-1)[0]}</span>
+              <span style={s.profileName}>
+                {(() => {
+                  const partes = user?.nome?.trim().split(/\s+/) || [];
+                  return partes.length > 1
+                    ? `${partes[0]} ${partes[partes.length - 1]}`
+                    : partes[0] || "";
+                })()}
+              </span>              
               <span style={s.profileRole}>{roleLabel}</span>
             </div>
           </Link>
