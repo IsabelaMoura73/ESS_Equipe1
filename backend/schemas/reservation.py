@@ -14,6 +14,7 @@ class ReservationCreate(BaseModel):
     room: str
     start_time: datetime
     end_time: datetime
+    admin_message: Optional[str] = None
 
     @field_validator("room")
     @classmethod
@@ -38,6 +39,7 @@ class ReservationUpdate(BaseModel):
     room: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    admin_message: Optional[str] = None
 
     @field_validator("room")
     @classmethod
@@ -65,5 +67,6 @@ class ReservationResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     status: ReservationStatus
+    admin_message: Optional[str] = None
 
     model_config = {"from_attributes": True}
