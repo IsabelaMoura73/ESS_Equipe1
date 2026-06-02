@@ -595,3 +595,42 @@ def sistema_marca_status(context, expected):
     db.close()
     assert r is not None
     assert r.status.value == expected
+
+
+# TESTES UNITARIOS
+
+from datetime import timedelta, timezone
+from fastapi import HTTPException
+from services.reservation import _check_end_after_start, _check_start_not_in_past
+ 
+ 
+def test_unitario_fim_posterior_ao_inicio_nao_levanta_erro():
+    # fim depois do inicio -> nao deve levantar excecao
+    _check_end_after_start(datetime(2030, 6, 1, 8, 0), datetime(2030, 6, 1, 10, 0))
+ 
+ 
+def test_unitario_fim_igual_ao_inicio_rejeitado():
+    momento = datetime(2030, 6, 1, 8, 0)
+    with pytest.raises(HTTPException) as exc:
+        _check_end_after_start(momento, momento)
+    assert exc.value.status_code == 400
+ 
+ 
+def test_unitario_fim_antes_do_inicio_rejeitado():
+    with pytest.raises(HTTPException) as exc:
+        _check_end_after_start(datetime(2030, 6, 1, 10, 0), datetime(2030, 6, 1, 8, 0))
+    assert exc.value.status_code == 400
+    assert "posterior" in exc.value.detail.lower()
+ 
+ 
+def test_unitario_inicio_no_futuro_aceito():
+    futuro = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
+    _check_start_not_in_past(futuro)
+ 
+ 
+def test_unitario_inicio_no_passado_rejeitado():
+    with pytest.raises(HTTPException) as exc:
+        _check_start_not_in_past(datetime(2020, 1, 1, 8, 0))
+    assert exc.value.status_code == 400
+    assert "passado" in exc.value.detail.lower()
+ 
