@@ -1,11 +1,15 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
+from passlib.context import CryptContext
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from models.reservation import Reservation, ReservationStatus
 from models.room import Room, RoomMaintenanceStatus
 from models.user import User, UserRole
 from schemas.reservation import ReservationCreate, ReservationUpdate
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _USER_TYPE_MAP = {
     UserRole.DISCENTE: "discente",
@@ -14,12 +18,17 @@ _USER_TYPE_MAP = {
 }
 
 
-def _get_active_user(db: Session, user_cpf: str) -> User:
+def _get_active_user(db: Session, user_cpf: str, user_nome: str, user_senha: str) -> User:
     user = db.query(User).filter(User.cpf == user_cpf).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado",
+        )
+    if user.nome != user_nome or not _pwd_context.verify(user_senha, user.senha):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciais inválidas",
         )
     if not user.status:
         raise HTTPException(
@@ -29,14 +38,27 @@ def _get_active_user(db: Session, user_cpf: str) -> User:
     return user
 
 
-def _check_room_exists_and_available(db: Session, room_name: str) -> None:
+def _check_room_exists_and_available(db: Session, room_name: str, start: datetime, end: datetime) -> None:
     room = db.query(Room).filter(Room.name == room_name).first()
     if room is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Sala não encontrada",
         )
-    if room.maintenance_status in (RoomMaintenanceStatus.yes, RoomMaintenanceStatus.scheduled):
+    # Verifica sobreposição com qualquer manutenção confirmada no período,
+    # independente do maintenance_status da sala (yes ou scheduled)
+    start_date = start.date()
+    end_date = end.date()
+    conflict = db.execute(
+        text(
+            "SELECT id FROM maintenance_requests "
+            "WHERE room = :room AND status = 'confirmed' "
+            "AND start_date <= :end_date AND end_date >= :start_date "
+            "LIMIT 1"
+        ),
+        {"room": room_name, "start_date": start_date, "end_date": end_date},
+    ).first()
+    if conflict:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sala em manutenção ou com manutenção agendada",
@@ -50,6 +72,14 @@ def _check_start_not_in_past(start: datetime) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Não é possível criar reservas com data/hora de início no passado",
+        )
+
+
+def _check_end_after_start(start: datetime, end: datetime) -> None:
+    if end <= start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O horário de fim deve ser posterior ao horário de início",
         )
 
 
@@ -95,10 +125,11 @@ def _check_user_conflict(
         )
 
 
-def create_reservation(db: Session, user_cpf: str, data: ReservationCreate) -> Reservation:
-    user = _get_active_user(db, user_cpf)
+def create_reservation(db: Session, user_cpf: str, user_nome: str, user_senha: str, data: ReservationCreate) -> Reservation:
+    user = _get_active_user(db, user_cpf, user_nome, user_senha)
     _check_start_not_in_past(data.start_time)
-    _check_room_exists_and_available(db, data.room)
+    _check_end_after_start(data.start_time, data.end_time)
+    _check_room_exists_and_available(db, data.room, data.start_time, data.end_time)
     _check_confirmed_conflict(db, data.room, data.start_time, data.end_time)
     _check_user_conflict(db, user_cpf, data.start_time, data.end_time)
     reservation = Reservation(
@@ -117,9 +148,9 @@ def create_reservation(db: Session, user_cpf: str, data: ReservationCreate) -> R
 
 
 def update_reservation(
-    db: Session, reservation_id: int, user_cpf: str, data: ReservationUpdate
+    db: Session, reservation_id: int, user_cpf: str, user_nome: str, user_senha: str, data: ReservationUpdate
 ) -> Reservation:
-    _get_active_user(db, user_cpf)
+    _get_active_user(db, user_cpf, user_nome, user_senha)
     reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if reservation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva não encontrada")
@@ -132,7 +163,8 @@ def update_reservation(
     new_end   = data.end_time   if data.end_time   is not None else reservation.end_time
     if data.start_time is not None:
         _check_start_not_in_past(new_start)
-    _check_room_exists_and_available(db, new_room)
+    _check_end_after_start(new_start, new_end)
+    _check_room_exists_and_available(db, new_room, new_start, new_end)
     _check_confirmed_conflict(db, new_room, new_start, new_end, exclude_id=reservation_id)
     _check_user_conflict(db, user_cpf, new_start, new_end, exclude_id=reservation_id)
     reservation.room       = new_room
@@ -143,8 +175,8 @@ def update_reservation(
     return reservation
 
 
-def cancel_reservation(db: Session, reservation_id: int, user_cpf: str) -> None:
-    _get_active_user(db, user_cpf)
+def cancel_reservation(db: Session, reservation_id: int, user_cpf: str, user_nome: str, user_senha: str) -> None:
+    _get_active_user(db, user_cpf, user_nome, user_senha)
     reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if reservation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva não encontrada")

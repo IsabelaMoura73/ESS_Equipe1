@@ -1,247 +1,241 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../api/client";
+import React from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-function ReserveModal({ room, tipo, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    horario_inicio: "",
-    horario_fim: "",
-    qtd_computadores: 1,
-  });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const body = {
-        sala_id: room.id,
-        horario_inicio: new Date(form.horario_inicio).toISOString(),
-        horario_fim: new Date(form.horario_fim).toISOString(),
-        ...(tipo === "lab" ? { qtd_computadores: Number(form.qtd_computadores) } : {}),
-      };
-      await api.post(`/reservations/${tipo}`, body);
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function Home() {
+  const { user } = useAuth();
 
   return (
-    <div style={overlay}>
-      <div className="auth-box" style={{ maxWidth: 480 }}>
-        <h2 style={{ marginBottom: "1rem" }}>
-          Reservar {tipo === "lab" ? "Computadores em" : "Sala"}: {room.nome}
-        </h2>
-        <form onSubmit={handleSubmit}>
-          <label>Início</label>
-          <input
-            type="datetime-local"
-            value={form.horario_inicio}
-            onChange={(e) => setForm((f) => ({ ...f, horario_inicio: e.target.value }))}
-            required
-          />
-          <label>Fim</label>
-          <input
-            type="datetime-local"
-            value={form.horario_fim}
-            onChange={(e) => setForm((f) => ({ ...f, horario_fim: e.target.value }))}
-            required
-          />
-          {tipo === "lab" && (
+    <div style={styles.wrapper}>
+      <div style={styles.bg} aria-hidden="true">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} style={{ ...styles.circle, ...circlePos[i] }} />
+        ))}
+      </div>
+
+      <nav style={styles.nav}>
+        <span style={styles.brand}>Salla</span>
+        <div style={styles.navLinks}>
+          {user ? (
+            <Link to="/dashboard" style={styles.navBtn}>Meu painel →</Link>
+          ) : (
             <>
-              <label>Nº de Computadores (máx: {room.qtd_computadores})</label>
-              <input
-                type="number"
-                min={1}
-                max={room.qtd_computadores}
-                value={form.qtd_computadores}
-                onChange={(e) => setForm((f) => ({ ...f, qtd_computadores: e.target.value }))}
-                required
-              />
+              <Link to="/login" style={styles.navLink}>Entrar</Link>
+              <Link to="/cadastro" style={styles.navBtn}>Cadastrar-se</Link>
             </>
           )}
-          {error && <p className="error">{error}</p>}
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="submit" disabled={loading}>{loading ? "Enviando..." : "Confirmar"}</button>
-            <button type="button" className="btn btn-danger" onClick={onClose}>Cancelar</button>
-          </div>
-        </form>
-      </div>
+        </div>
+      </nav>
+
+      <main style={styles.main}>
+        <div style={styles.badge}>ESS 2026.1 - Equipe 1</div>
+        <h1 style={styles.title}>
+          Reserve salas e<br />
+          <span style={styles.highlight}>laboratórios</span><br />
+          com facilidade.
+        </h1>
+        <p style={styles.subtitle}>
+          Salla é o sistema de reserva de espaços da universidade. Docentes e
+          discentes podem solicitar salas e laboratórios de forma rápida, com
+          aprovação centralizada pela administração.
+        </p>
+
+        <div style={styles.actions}>
+          {user ? (
+            <Link to="/dashboard" style={styles.ctaPrimary}>Acessar meu painel</Link>
+          ) : (
+            <>
+              <Link to="/cadastro" style={styles.ctaPrimary}>Começar agora</Link>
+              <Link to="/login" style={styles.ctaSecondary}>Já tenho conta</Link>
+            </>
+          )}
+        </div>
+
+        <div style={styles.features}>
+          {featureList.map((f) => (
+            <div key={f.title} style={styles.featureCard}>
+              <span style={styles.featureIcon}>{f.icon}</span>
+              <strong style={styles.featureTitle}>{f.title}</strong>
+              <p style={styles.featureText}>{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }
 
-const overlay = {
-  position: "fixed", inset: 0, background: "rgba(0,0,0,.4)",
-  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
+const featureList = [
+  {
+    icon: "🏛️",
+    title: "Salas e Laboratórios",
+    desc: "Consulte a disponibilidade e reserve o espaço certo para sua aula ou estudo.",
+  },
+  {
+    icon: "✅",
+    title: "Aprovação centralizada",
+    desc: "Solicitações passam pela administração, garantindo organização e transparência.",
+  },
+  {
+    icon: "👤",
+    title: "Perfis por vínculo",
+    desc: "Acesso diferenciado para discentes, docentes e administradores.",
+  },
+];
+
+const circlePos = [
+  { top: "-80px", right: "-80px", width: "320px", height: "320px", opacity: 0.07 },
+  { top: "30%", left: "-120px", width: "250px", height: "250px", opacity: 0.05 },
+  { bottom: "-60px", right: "20%", width: "200px", height: "200px", opacity: 0.06 },
+  { top: "10%", right: "25%", width: "80px", height: "80px", opacity: 0.1 },
+  { bottom: "20%", left: "10%", width: "120px", height: "120px", opacity: 0.07 },
+  { top: "60%", right: "5%", width: "60px", height: "60px", opacity: 0.12 },
+];
+
+const styles = {
+  wrapper: {
+    minHeight: "100vh",
+    background: "#0f1117",
+    color: "#f0f0f0",
+    position: "relative",
+    overflow: "hidden",
+    fontFamily: "'Georgia', serif",
+  },
+  bg: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+  },
+  circle: {
+    position: "absolute",
+    borderRadius: "50%",
+    background: "#4361ee",
+  },
+  nav: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "1.5rem 2.5rem",
+    position: "relative",
+    zIndex: 10,
+    borderBottom: "1px solid rgba(255,255,255,0.06)",
+  },
+  brand: {
+    fontSize: "1.5rem",
+    fontWeight: "700",
+    letterSpacing: "-0.03em",
+    color: "#fff",
+  },
+  navLinks: {
+    display: "flex",
+    alignItems: "center",
+    gap: "1.5rem",
+  },
+  navLink: {
+    color: "#aaa",
+    textDecoration: "none",
+    fontSize: "0.9rem",
+  },
+  navBtn: {
+    background: "#4361ee",
+    color: "#fff",
+    textDecoration: "none",
+    padding: "7px 18px",
+    borderRadius: "6px",
+    fontSize: "0.9rem",
+    fontWeight: "600",
+  },
+  main: {
+    maxWidth: "780px",
+    margin: "0 auto",
+    padding: "5rem 2rem 4rem",
+    position: "relative",
+    zIndex: 10,
+  },
+  badge: {
+    display: "inline-block",
+    background: "rgba(67,97,238,0.15)",
+    border: "1px solid rgba(67,97,238,0.3)",
+    color: "#7b96ff",
+    padding: "4px 14px",
+    borderRadius: "20px",
+    fontSize: "0.78rem",
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    marginBottom: "2rem",
+  },
+  title: {
+    fontSize: "clamp(2.4rem, 6vw, 4rem)",
+    lineHeight: 1.1,
+    fontWeight: "700",
+    letterSpacing: "-0.03em",
+    marginBottom: "1.5rem",
+    color: "#fff",
+  },
+  highlight: {
+    color: "#4361ee",
+  },
+  subtitle: {
+    fontSize: "1.05rem",
+    lineHeight: 1.7,
+    color: "#888",
+    maxWidth: "520px",
+    marginBottom: "2.5rem",
+    fontFamily: "system-ui, sans-serif",
+  },
+  actions: {
+    display: "flex",
+    gap: "1rem",
+    flexWrap: "wrap",
+    marginBottom: "4rem",
+  },
+  ctaPrimary: {
+    background: "#4361ee",
+    color: "#fff",
+    textDecoration: "none",
+    padding: "12px 28px",
+    borderRadius: "8px",
+    fontWeight: "700",
+    fontSize: "0.95rem",
+    fontFamily: "system-ui, sans-serif",
+  },
+  ctaSecondary: {
+    background: "transparent",
+    color: "#aaa",
+    textDecoration: "none",
+    padding: "12px 28px",
+    borderRadius: "8px",
+    fontWeight: "600",
+    fontSize: "0.95rem",
+    border: "1px solid rgba(255,255,255,0.12)",
+    fontFamily: "system-ui, sans-serif",
+  },
+  features: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "1rem",
+  },
+  featureCard: {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: "10px",
+    padding: "1.25rem",
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.4rem",
+  },
+  featureIcon: {
+    fontSize: "1.4rem",
+  },
+  featureTitle: {
+    fontSize: "0.9rem",
+    color: "#eee",
+    fontFamily: "system-ui, sans-serif",
+  },
+  featureText: {
+    fontSize: "0.82rem",
+    color: "#666",
+    lineHeight: 1.5,
+    fontFamily: "system-ui, sans-serif",
+  },
 };
-
-export default function Home({ user }) {
-  const [rooms, setRooms] = useState([]);
-  const [reservasSala, setReservasSala] = useState([]);
-  const [reservasLab, setReservasLab] = useState([]);
-  const [modal, setModal] = useState(null); // { room, tipo }
-  const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    api.get("/rooms/").then(setRooms).catch(() => {});
-    api.get("/reservations/sala").then(setReservasSala).catch(() => {});
-    api.get("/reservations/lab").then(setReservasLab).catch(() => {});
-  }, []);
-
-  function reloadReservations() {
-    api.get("/reservations/sala").then(setReservasSala);
-    api.get("/reservations/lab").then(setReservasLab);
-  }
-
-  async function cancelSala(id) {
-    try {
-      await api.delete(`/reservations/sala/${id}`);
-      setMsg("Reserva cancelada.");
-      reloadReservations();
-    } catch (err) {
-      setMsg(err.message);
-    }
-  }
-
-  async function cancelLab(id) {
-    try {
-      await api.delete(`/reservations/lab/${id}`);
-      setMsg("Reserva cancelada.");
-      reloadReservations();
-    } catch (err) {
-      setMsg(err.message);
-    }
-  }
-
-  function onSaved() {
-    setModal(null);
-    setMsg("Reserva enviada! Aguarde confirmação do administrador.");
-    reloadReservations();
-  }
-
-  const myReservasSala = reservasSala.filter((r) => r.usuario_id === user?.id);
-  const myReservasLab = reservasLab.filter((r) => r.usuario_id === user?.id);
-
-  return (
-    <>
-      {modal && (
-        <ReserveModal
-          room={modal.room}
-          tipo={modal.tipo}
-          onClose={() => setModal(null)}
-          onSaved={onSaved}
-        />
-      )}
-
-      {msg && <p className="success" style={{ marginBottom: "1rem" }}>{msg}</p>}
-
-      <div className="card">
-        <h2>Salas Disponíveis</h2>
-        {rooms.length === 0 && <p className="muted">Nenhuma sala cadastrada.</p>}
-        <table>
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Capacidade</th>
-              <th>Computadores</th>
-              <th>Status</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rooms.map((r) => (
-              <tr key={r.id}>
-                <td>{r.nome}</td>
-                <td>{r.capacidade}</td>
-                <td>{r.qtd_computadores}</td>
-                <td>
-                  {r.em_manutencao
-                    ? <span className="badge badge-negada">Manutenção</span>
-                    : <span className="badge badge-confirmada">Disponível</span>}
-                </td>
-                <td style={{ display: "flex", gap: "0.4rem" }}>
-                  <button
-                    className="btn btn-sm"
-                    disabled={r.em_manutencao}
-                    onClick={() => setModal({ room: r, tipo: "sala" })}
-                  >
-                    Reservar Sala
-                  </button>
-                  {r.qtd_computadores > 0 && (
-                    <button
-                      className="btn btn-sm"
-                      disabled={r.em_manutencao}
-                      onClick={() => setModal({ room: r, tipo: "lab" })}
-                    >
-                      Reservar Lab
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h2>Minhas Reservas de Sala</h2>
-        {myReservasSala.length === 0 && <p className="muted">Nenhuma reserva.</p>}
-        <table>
-          <thead>
-            <tr><th>Sala ID</th><th>Início</th><th>Fim</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {myReservasSala.map((r) => (
-              <tr key={r.id}>
-                <td>{r.sala_id}</td>
-                <td>{new Date(r.horario_inicio).toLocaleString("pt-BR")}</td>
-                <td>{new Date(r.horario_fim).toLocaleString("pt-BR")}</td>
-                <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
-                <td>
-                  {r.status === "pendente" && (
-                    <button className="btn btn-sm btn-danger" onClick={() => cancelSala(r.id)}>
-                      Cancelar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h2>Minhas Reservas de Lab</h2>
-        {myReservasLab.length === 0 && <p className="muted">Nenhuma reserva.</p>}
-        <table>
-          <thead>
-            <tr><th>Sala ID</th><th>Computadores</th><th>Início</th><th>Fim</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {myReservasLab.map((r) => (
-              <tr key={r.id}>
-                <td>{r.sala_id}</td>
-                <td>{r.qtd_computadores}</td>
-                <td>{new Date(r.horario_inicio).toLocaleString("pt-BR")}</td>
-                <td>{new Date(r.horario_fim).toLocaleString("pt-BR")}</td>
-                <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
-                <td>
-                  {r.status === "pendente" && (
-                    <button className="btn btn-sm btn-danger" onClick={() => cancelLab(r.id)}>
-                      Cancelar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
