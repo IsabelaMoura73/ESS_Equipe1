@@ -31,15 +31,31 @@ function formatTime(isoStr) {
   return isoStr.split("T")[1]?.slice(0, 5) ?? "";
 }
 
+// ── Toast ────────────────────────────────────────────────────────────────────
+
+function Toast({ toast }) {
+  if (!toast.text) return null;
+  const isSuccess = toast.type === "success";
+  return (
+    <div style={{
+      ...s.toast,
+      background: isSuccess ? "#2dc653" : "#e63946",
+      animation: "fadeSlideIn 0.3s ease",
+    }}>
+      <span style={s.toastIcon}>{isSuccess ? "✓" : "✕"}</span>
+      {toast.text}
+    </div>
+  );
+}
+
 // ── Nova Reserva ────────────────────────────────────────────────────────────
 
-function NovaReservaForm({ authParams, onCreated }) {
+function NovaReservaForm({ authHeaders, onCreated, onToast }) {
   const [rooms, setRooms] = useState([]);
   const [roomsError, setRoomsError] = useState(false);
-  const [form, setForm] = useState({ room: "", start_time: "", end_time: "" });
+  const [form, setForm] = useState({ room: "", start_time: "", end_time: "", admin_message: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     api.get("/api/rooms/?limit=100")
@@ -57,17 +73,17 @@ function NovaReservaForm({ authParams, onCreated }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setLoading(true);
     try {
-      await api.post(`/api/reservations/?${authParams()}`, {
+      await api.post(`/api/reservations/`, {
         room: form.room,
         start_time: toIso(form.start_time),
         end_time: toIso(form.end_time),
-      });
-      setSuccess("Reserva criada com sucesso! Aguardando confirmação do administrador.");
-      setForm({ room: rooms.length > 0 ? rooms[0].name : "", start_time: "", end_time: "" });
+        ...(form.admin_message.trim() ? { admin_message: form.admin_message.trim() } : {}),
+      }, authHeaders());
+      setForm({ room: rooms.length > 0 ? rooms[0].name : "", start_time: "", end_time: "", admin_message: "" });
       onCreated();
+      onToast("success", "Reserva criada com sucesso! Aguardando confirmação do administrador.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -106,8 +122,14 @@ function NovaReservaForm({ authParams, onCreated }) {
               value={form.end_time} onChange={set("end_time")} required />
           </div>
         </div>
-        {error   && <p style={s.error}>{error}</p>}
-        {success && <p style={s.success}>{success}</p>}
+        <div style={s.field}>
+          <label style={s.label} htmlFor="nova-msg">Mensagem para o administrador <span style={s.optional}>(opcional)</span></label>
+          <textarea id="nova-msg" style={s.textarea} rows={3}
+            placeholder="Informe o motivo da reserva ou alguma observação relevante..."
+            value={form.admin_message} onChange={set("admin_message")} maxLength={500} />
+          <span style={s.charCount}>{form.admin_message.length}/500</span>
+        </div>
+        {error && <p style={s.error}>{error}</p>}
         <div style={{ marginTop: "0.75rem" }}>
           <button type="submit" style={s.btn} disabled={loading}>
             {loading ? "Confirmando..." : "Confirmar reserva"}
@@ -120,13 +142,14 @@ function NovaReservaForm({ authParams, onCreated }) {
 
 // ── Modal de Edição ─────────────────────────────────────────────────────────
 
-function EditarModal({ reserva, authParams, onSaved, onClose }) {
+function EditarModal({ reserva, authHeaders, onSaved, onClose }) {
   const [rooms, setRooms] = useState([]);
   const [roomsError, setRoomsError] = useState(false);
   const [form, setForm] = useState({
     room: reserva.room,
     start_time: reserva.start_time.slice(0, 16),
     end_time: reserva.end_time.slice(0, 16),
+    admin_message: reserva.admin_message ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -148,10 +171,13 @@ function EditarModal({ reserva, authParams, onSaved, onClose }) {
     if (form.room !== reserva.room) updates.room = form.room;
     if (toIso(form.start_time) !== reserva.start_time) updates.start_time = toIso(form.start_time);
     if (toIso(form.end_time) !== reserva.end_time) updates.end_time = toIso(form.end_time);
+    const newMsg = form.admin_message.trim();
+    const oldMsg = reserva.admin_message ?? "";
+    if (newMsg !== oldMsg) updates.admin_message = newMsg;
     if (Object.keys(updates).length === 0) { onClose(); return; }
     setLoading(true);
     try {
-      await api.put(`/api/reservations/${reserva.id}?${authParams()}`, updates);
+      await api.put(`/api/reservations/${reserva.id}`, updates, authHeaders());
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -190,6 +216,13 @@ function EditarModal({ reserva, authParams, onSaved, onClose }) {
             <label style={s.label} htmlFor="edit-end">Fim</label>
             <input id="edit-end" style={s.input} type="datetime-local"
               value={form.end_time} onChange={set("end_time")} required />
+          </div>
+          <div style={s.field}>
+            <label style={s.label} htmlFor="edit-msg">Mensagem para o administrador <span style={s.optional}>(opcional)</span></label>
+            <textarea id="edit-msg" style={s.textarea} rows={3}
+              placeholder="Informe o motivo da reserva ou alguma observação relevante..."
+              value={form.admin_message} onChange={set("admin_message")} maxLength={500} />
+            <span style={s.charCount}>{form.admin_message.length}/500</span>
           </div>
           {error && <p style={s.error}>{error}</p>}
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
@@ -233,23 +266,49 @@ function ReservaRow({ reserva, onEdit, onCancel }) {
   );
 }
 
+// ── Modal de confirmação de cancelamento ────────────────────────────────────
+
+function CancelConfirmModal({ reserva, onConfirm, onClose }) {
+  return (
+    <div style={s.overlay}>
+      <div style={{ ...s.modal, maxWidth: "380px", textAlign: "center" }}>
+        <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>⚠️</div>
+        <h2 style={{ ...s.modalTitle, marginBottom: "0.5rem" }}>Cancelar reserva?</h2>
+        <p style={{ color: "#555", fontSize: "0.92rem", marginBottom: "1.5rem" }}>
+          Você tem certeza que deseja cancelar a reserva da sala <strong>{reserva.room}</strong>?
+          Esta ação não pode ser desfeita.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+          <button style={s.btnDanger} type="button" onClick={onConfirm}>
+            Sim, cancelar
+          </button>
+          <button style={s.btnSecondary} type="button" onClick={onClose}>
+            Voltar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ────────────────────────────────────────────────────────
 
 export default function ReservasSala() {
   const { user } = useAuth();
-  const [reservas, setReservas]     = useState([]);
+  const [reservas, setReservas]       = useState([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError]   = useState("");
+  const [listError, setListError]     = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
-  const [editando, setEditando]     = useState(null);
-  const [feedback, setFeedback]     = useState({ type: "", text: "" });
+  const [editando, setEditando]       = useState(null);
+  const [cancelando, setCancelando]   = useState(null);
+  const [toast, setToast]             = useState({ type: "", text: "" });
 
-  function authParams() {
-    return new URLSearchParams({
-      user_cpf:   user.cpf,
-      user_nome:  user.nome,
-      user_senha: user.senha,
-    }).toString();
+  function authHeaders() {
+    return {
+      "X-User-Cpf":   user.cpf,
+      "X-User-Nome":  user.nome,
+      "X-User-Senha": user.senha,
+    };
   }
 
   const fetchReservas = useCallback(async () => {
@@ -270,42 +329,60 @@ export default function ReservasSala() {
 
   useEffect(() => { fetchReservas(); }, [fetchReservas]);
 
-  function showFeedback(type, text) {
-    setFeedback({ type, text });
-    setTimeout(() => setFeedback({ type: "", text: "" }), 5000);
+  function showToast(type, text) {
+    setToast({ type, text });
+    setTimeout(() => setToast({ type: "", text: "" }), 4000);
   }
 
   function handleEdited() {
     setEditando(null);
-    showFeedback("success", "Reserva atualizada com sucesso!");
+    showToast("success", "Reserva atualizada com sucesso!");
     fetchReservas();
   }
 
-  async function handleCancel(reserva) {
-    if (!window.confirm(`Cancelar a reserva da sala "${reserva.room}"?`)) return;
+  async function confirmCancel() {
+    const reserva = cancelando;
+    setCancelando(null);
     try {
-      await api.delete(`/api/reservations/${reserva.id}?${authParams()}`);
-      showFeedback("success", "Reserva cancelada com sucesso.");
+      await api.delete(`/api/reservations/${reserva.id}`, authHeaders());
+      showToast("success", "Reserva cancelada com sucesso.");
       fetchReservas();
     } catch (err) {
-      showFeedback("error", err.message);
+      showToast("error", err.message);
     }
   }
 
   return (
     <Navbar>
+      <style>{`
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(-16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      <Toast toast={toast} />
+
       {editando && (
         <EditarModal
           reserva={editando}
-          authParams={authParams}
+          authHeaders={authHeaders}
           onSaved={handleEdited}
           onClose={() => setEditando(null)}
         />
       )}
 
+      {cancelando && (
+        <CancelConfirmModal
+          reserva={cancelando}
+          onConfirm={confirmCancel}
+          onClose={() => setCancelando(null)}
+        />
+      )}
+
       <h1 style={s.pageTitle}>Reservas de Sala</h1>
 
-      <NovaReservaForm authParams={authParams} onCreated={fetchReservas} />
+      <NovaReservaForm authHeaders={authHeaders} onCreated={fetchReservas} onToast={showToast} />
 
       <div style={s.card}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
@@ -318,12 +395,6 @@ export default function ReservasSala() {
             ))}
           </select>
         </div>
-
-        {feedback.text && (
-          <p style={{ ...(feedback.type === "success" ? s.success : s.error), marginBottom: "0.75rem" }}>
-            {feedback.text}
-          </p>
-        )}
 
         {loadingList && <p style={s.muted}>Carregando reservas...</p>}
         {listError   && <p style={s.error}>{listError}</p>}
@@ -344,7 +415,7 @@ export default function ReservasSala() {
                 <tbody>
                   {reservas.map((r) => (
                     <ReservaRow key={r.id} reserva={r}
-                      onEdit={setEditando} onCancel={handleCancel} />
+                      onEdit={setEditando} onCancel={setCancelando} />
                   ))}
                 </tbody>
               </table>
@@ -357,27 +428,32 @@ export default function ReservasSala() {
 }
 
 const s = {
-  pageTitle:  { fontSize: "1.4rem", fontWeight: "700", color: "#1e3a5f", marginBottom: "1.5rem" },
-  card:       { background: "#fff", borderRadius: "10px", padding: "1.5rem", marginBottom: "1.25rem", boxShadow: "0 1px 4px rgba(0,0,0,.07)" },
-  cardTitle:  { fontSize: "1rem", fontWeight: "700", color: "#1a1a2e", margin: 0 },
-  modalTitle: { fontSize: "1rem", fontWeight: "700", color: "#1a1a2e", margin: 0 },
-  form:       { display: "flex", flexDirection: "column", gap: "0.85rem" },
-  grid2:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" },
-  field:      { display: "flex", flexDirection: "column", gap: "0.35rem" },
-  label:      { fontSize: "0.78rem", fontWeight: "600", color: "#555", textTransform: "uppercase", letterSpacing: "0.04em" },
-  input:      { width: "100%", padding: "8px 12px", border: "1px solid #d0d0d0", borderRadius: "6px", fontSize: "0.92rem", boxSizing: "border-box", background: "#fff", color: "#1a1a2e" },
-  btn:        { background: "#4361ee", color: "#fff", border: "none", borderRadius: "6px", padding: "9px 18px", fontSize: "0.9rem", fontWeight: "700", cursor: "pointer" },
-  btnDanger:  { background: "#e63946", color: "#fff", border: "none", borderRadius: "6px", padding: "9px 18px", fontSize: "0.9rem", fontWeight: "700", cursor: "pointer" },
-  btnSm:      { background: "#4361ee", color: "#fff", border: "none", borderRadius: "5px", padding: "4px 12px", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" },
+  pageTitle:   { fontSize: "1.4rem", fontWeight: "700", color: "#1e3a5f", marginBottom: "1.5rem" },
+  card:        { background: "#fff", borderRadius: "10px", padding: "1.5rem", marginBottom: "1.25rem", boxShadow: "0 1px 4px rgba(0,0,0,.07)" },
+  cardTitle:   { fontSize: "1rem", fontWeight: "700", color: "#1a1a2e", margin: 0 },
+  modalTitle:  { fontSize: "1rem", fontWeight: "700", color: "#1a1a2e", margin: 0 },
+  form:        { display: "flex", flexDirection: "column", gap: "0.85rem" },
+  grid2:       { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" },
+  field:       { display: "flex", flexDirection: "column", gap: "0.35rem" },
+  label:       { fontSize: "0.78rem", fontWeight: "600", color: "#555", textTransform: "uppercase", letterSpacing: "0.04em" },
+  optional:    { fontWeight: "400", color: "#999", textTransform: "none", letterSpacing: "0" },
+  input:       { width: "100%", padding: "8px 12px", border: "1px solid #d0d0d0", borderRadius: "6px", fontSize: "0.92rem", boxSizing: "border-box", background: "#fff", color: "#1a1a2e" },
+  textarea:    { width: "100%", padding: "8px 12px", border: "1px solid #d0d0d0", borderRadius: "6px", fontSize: "0.92rem", boxSizing: "border-box", background: "#fff", color: "#1a1a2e", resize: "vertical", fontFamily: "inherit" },
+  charCount:   { fontSize: "0.72rem", color: "#aaa", textAlign: "right" },
+  btn:         { background: "#4361ee", color: "#fff", border: "none", borderRadius: "6px", padding: "9px 18px", fontSize: "0.9rem", fontWeight: "700", cursor: "pointer" },
+  btnDanger:   { background: "#e63946", color: "#fff", border: "none", borderRadius: "6px", padding: "9px 18px", fontSize: "0.9rem", fontWeight: "700", cursor: "pointer" },
+  btnSecondary: { background: "#f0f0f5", color: "#333", border: "none", borderRadius: "6px", padding: "9px 18px", fontSize: "0.9rem", fontWeight: "600", cursor: "pointer" },
+  btnSm:       { background: "#4361ee", color: "#fff", border: "none", borderRadius: "5px", padding: "4px 12px", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" },
   btnSmDanger: { background: "#e63946" },
-  error:      { color: "#e63946", fontSize: "0.84rem", margin: 0 },
-  success:    { color: "#2dc653", fontSize: "0.84rem", margin: 0 },
-  muted:      { color: "#888", fontSize: "0.88rem" },
-  table:      { width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" },
-  th:         { textAlign: "left", padding: "8px 10px", background: "#f0f0f5", fontSize: "0.78rem", fontWeight: "700", color: "#444" },
-  td:         { padding: "8px 10px", borderBottom: "1px solid #eee", verticalAlign: "middle" },
-  tr:         {},
-  overlay:    { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
-  modal:      { background: "#fff", borderRadius: "12px", padding: "1.75rem", width: "100%", maxWidth: "460px", boxShadow: "0 8px 32px rgba(0,0,0,.18)" },
-  closeBtn:   { background: "none", border: "none", fontSize: "1rem", cursor: "pointer", color: "#888", padding: "2px 6px", borderRadius: "4px" },
+  error:       { color: "#e63946", fontSize: "0.84rem", margin: 0 },
+  muted:       { color: "#888", fontSize: "0.88rem" },
+  table:       { width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" },
+  th:          { textAlign: "left", padding: "8px 10px", background: "#f0f0f5", fontSize: "0.78rem", fontWeight: "700", color: "#444" },
+  td:          { padding: "8px 10px", borderBottom: "1px solid #eee", verticalAlign: "middle" },
+  tr:          {},
+  overlay:     { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
+  modal:       { background: "#fff", borderRadius: "12px", padding: "1.75rem", width: "100%", maxWidth: "460px", boxShadow: "0 8px 32px rgba(0,0,0,.18)" },
+  closeBtn:    { background: "none", border: "none", fontSize: "1rem", cursor: "pointer", color: "#888", padding: "2px 6px", borderRadius: "4px" },
+  toast:       { position: "fixed", top: "1.25rem", left: "50%", transform: "translateX(-50%)", zIndex: 300, color: "#fff", padding: "0.75rem 1.5rem", borderRadius: "8px", fontSize: "0.92rem", fontWeight: "600", boxShadow: "0 4px 16px rgba(0,0,0,.18)", display: "flex", alignItems: "center", gap: "0.5rem", whiteSpace: "nowrap" },
+  toastIcon:   { fontSize: "1rem", fontWeight: "700" },
 };
