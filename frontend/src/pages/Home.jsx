@@ -2,6 +2,12 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+const REDIRECT = {
+  discente: "/reservas-de-sala",
+  docente:  "/reservas-de-sala",
+  admin:    "/salas",
+};
+
 export default function Home() {
   const { user } = useAuth();
 
@@ -17,7 +23,7 @@ export default function Home() {
         <span style={styles.brand}>Salla</span>
         <div style={styles.navLinks}>
           {user ? (
-            <Link to="/dashboard" style={styles.navBtn}>Meu painel →</Link>
+            <Link to={REDIRECT[user.tipo] || "/perfil"} style={styles.navBtn}>Meu painel →</Link>
           ) : (
             <>
               <Link to="/login" style={styles.navLink}>Entrar</Link>
@@ -42,7 +48,7 @@ export default function Home() {
 
         <div style={styles.actions}>
           {user ? (
-            <Link to="/dashboard" style={styles.ctaPrimary}>Acessar meu painel</Link>
+            <Link to={REDIRECT[user.tipo] || "/perfil"} style={styles.ctaPrimary}>Acessar meu painel</Link>
           ) : (
             <>
               <Link to="/cadastro" style={styles.ctaPrimary}>Começar agora</Link>
