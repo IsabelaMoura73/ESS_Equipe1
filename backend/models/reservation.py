@@ -51,3 +51,6 @@ class Reservation(Base):
         default=ReservationStatus.pending,
         nullable=False,
     )
+
+    # Mensagem opcional do usuário para o administrador
+    admin_message = Column(String(500), nullable=True)

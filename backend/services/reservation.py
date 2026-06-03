@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy import text
@@ -65,10 +65,15 @@ def _check_room_exists_and_available(db: Session, room_name: str, start: datetim
         )
 
 
+_BRT = timezone(timedelta(hours=-3))
+
+def _now_brt() -> datetime:
+    return datetime.now(_BRT).replace(tzinfo=None)
+
 def _check_start_not_in_past(start: datetime) -> None:
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
     start_naive = start.replace(tzinfo=None) if start.tzinfo is not None else start
-    if start_naive < now:
+    # margem de 5 min para compensar latência e diferenças de relógio do cliente
+    if start_naive < _now_brt() - timedelta(minutes=5):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Não é possível criar reservas com data/hora de início no passado",
@@ -140,6 +145,7 @@ def create_reservation(db: Session, user_cpf: str, user_nome: str, user_senha: s
         start_time=data.start_time,
         end_time=data.end_time,
         status=ReservationStatus.pending,
+        admin_message=data.admin_message,
     )
     db.add(reservation)
     db.commit()
@@ -167,9 +173,11 @@ def update_reservation(
     _check_room_exists_and_available(db, new_room, new_start, new_end)
     _check_confirmed_conflict(db, new_room, new_start, new_end, exclude_id=reservation_id)
     _check_user_conflict(db, user_cpf, new_start, new_end, exclude_id=reservation_id)
-    reservation.room       = new_room
-    reservation.start_time = new_start
-    reservation.end_time   = new_end
+    reservation.room          = new_room
+    reservation.start_time    = new_start
+    reservation.end_time      = new_end
+    if data.admin_message is not None:
+        reservation.admin_message = data.admin_message
     db.commit()
     db.refresh(reservation)
     return reservation
