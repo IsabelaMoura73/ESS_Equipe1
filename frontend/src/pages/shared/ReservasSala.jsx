@@ -449,7 +449,7 @@ const s = {
   muted:       { color: "#888", fontSize: "0.88rem" },
   table:       { width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" },
   th:          { textAlign: "left", padding: "8px 10px", background: "#f0f0f5", fontSize: "0.78rem", fontWeight: "700", color: "#444" },
-  td:          { padding: "8px 10px", borderBottom: "1px solid #eee", verticalAlign: "middle" },
+  td:          { padding: "8px 10px", borderBottom: "1px solid #eee", verticalAlign: "middle", color: "#1a1a2e" },
   tr:          {},
   overlay:     { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
   modal:       { background: "#fff", borderRadius: "12px", padding: "1.75rem", width: "100%", maxWidth: "460px", boxShadow: "0 8px 32px rgba(0,0,0,.18)" },
