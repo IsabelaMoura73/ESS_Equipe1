@@ -1,13 +1,15 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from database import SessionLocal
 from models.reservation import Reservation, ReservationStatus
 
+_BRT = timezone(timedelta(hours=-3))
+
 
 def _expire_reservations() -> None:
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(_BRT).replace(tzinfo=None)
     db = SessionLocal()
     try:
         # pending cuja start_time já passou → denied
