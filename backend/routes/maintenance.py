@@ -17,8 +17,8 @@ def create_request(data: MaintenanceRequestCreate, teacher_cpf: str, db: Session
     return create_maintenance_request(db, teacher_cpf, data)
 
 @router.get("/my-requests", response_model=List[MaintenanceRequestResponse])
-def list_my_requests(teacher_cpf: str, db: Session = Depends(get_db)):
-    return list_maintenance_requests(db, teacher_cpf)
+def list_my_requests(teacher_cpf: str, status: str = None, db: Session = Depends(get_db)):
+    return list_maintenance_requests(db, teacher_cpf, status)
 
 @router.put("/{request_id}", response_model=MaintenanceRequestResponse)
 def update_request(request_id: int, data: MaintenanceRequestUpdate, teacher_cpf: str, db: Session = Depends(get_db)):

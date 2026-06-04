@@ -43,11 +43,14 @@ def create_maintenance_request(db: Session, teacher_cpf: str, data: MaintenanceR
     db.refresh(new_request)
     return new_request
 
-def list_maintenance_requests(db: Session, teacher_cpf: str):
+def list_maintenance_requests(db: Session, teacher_cpf: str, status: str = None):
     get_teacher_or_raise(db, teacher_cpf)
-    return db.query(MaintenanceRequest).filter(
+    query = db.query(MaintenanceRequest).filter(
         MaintenanceRequest.teacher_cpf == teacher_cpf
-    ).all()
+    )
+    if status:
+        query = query.filter(MaintenanceRequest.status == status)
+    return query.all()
 
 def update_maintenance_request(db: Session, request_id: int, teacher_cpf: str, data: MaintenanceRequestUpdate):
     get_teacher_or_raise(db, teacher_cpf)
