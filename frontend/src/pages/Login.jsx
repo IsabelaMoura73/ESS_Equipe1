@@ -23,7 +23,7 @@ export default function Login() {
     setLoading(true);
     try {
       const userData = await api.post("/users/login", { cpf, senha });
-      login(userData);
+      login({ ...userData, senha });
       navigate(REDIRECT[userData.tipo] || "/reservas-de-sala");
     } catch (err) {
       setError(err.message);
