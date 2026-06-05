@@ -3,7 +3,7 @@ const BASE_URL = "http://localhost:8000";
 async function request(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...options.headers };
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers, credencials: "include" });
 
   if (res.status === 204) return null;
 
