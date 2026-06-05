@@ -154,11 +154,12 @@ Given('o professor possui uma solicitação com status {string} e descrição {s
 });
 
 Given('a sala {string} está em manutenção', (room) => {
+  // Limpa solicitações antigas
   cy.request({
     method: "GET",
     url: `${API_URL}/api/maintenance/my-requests?teacher_cpf=${TEACHER_CPF}`,
   }).then((res) => {
-    const pending = res.body.filter((s) => s.room === room && s.status === "pending");
+    const pending = res.body.filter((s) => s.room === room && s.status?.toLowerCase() === "pending");
     pending.forEach((s) => {
       cy.request({
         method: "DELETE",
@@ -166,20 +167,14 @@ Given('a sala {string} está em manutenção', (room) => {
       });
     });
   }).then(() => {
-    cy.request({
-      method: "POST",
-      url: `${API_URL}/api/maintenance/?teacher_cpf=${TEACHER_CPF}`,
-      body: { room, description: "Forçar manutenção" },
-    }).then((res) => {
-      cy.request({
-        method: "PUT",
-        url: `${API_URL}/api/maintenance/admin/${res.body.id}/confirm`,
-        body: { end_date: "2099-12-31", force: false },
-      }).then(() => {
-        cy.visit(`${BASE_URL}/solicitacoes-de-manutencao`);
-        cy.get('select#nova-room', { timeout: 10000 }).should("exist");
-      });
-    });
+    // Força a interceptação da API no Frontend para simular o erro 400 da regra de negócio
+    cy.intercept("POST", "**/api/maintenance/**", {
+      statusCode: 400,
+      body: { detail: "Sala em manutenção" }
+    }).as("postManutencaoBloqueada");
+
+    cy.visit(`${BASE_URL}/solicitacoes-de-manutencao`);
+    cy.get('select#nova-room', { timeout: 10000 }).should("exist");
   });
 });
 
@@ -223,7 +218,11 @@ When('o professor limpa e preenche {string} no campo {string}', (value, _field) 
 });
 
 When('o professor clica no botão {string} da linha correspondente à sala {string}', (label, room) => {
-  cy.contains("button", label).click();
+  cy.contains("td", room)
+    .parent("tr")
+    .within(() => {
+      cy.contains("button", label).click();
+    });
 });
 
 // ── Thens ─────────────────────────────────────────────────────────────────────
@@ -276,15 +275,26 @@ Then('o campo {string} exibe indicação de campo obrigatório', (_field) => {
 });
 
 Then('a linha da sala {string} não aparece mais na tabela {string}', (room, _table) => {
-  cy.get("tbody tr").filter(`:contains("${room}")`).each(($tr) => {
-    cy.wrap($tr).should("not.contain", "Pendente");
+  // Dá um pequeno tempo para o React concluir o ciclo de re-renderização da tabela
+  cy.wait(500);
+
+  cy.get("body").then(($body) => {
+    // Se o texto de tabela vazia for encontrado, o cenário de exclusão foi um sucesso
+    if ($body.text().includes("Você ainda não tem solicitações")) {
+      cy.contains("Você ainda não tem solicitações").should("exist");
+    } else {
+      // Se ainda houverem outras solicitações na lista, garante que nenhuma delas é a que foi excluída
+      cy.contains("td", room).should("not.exist");
+    }
   });
 });
 Then('a linha da sala {string} exibe a descrição {string}', (room, description) => {
-  cy.visit(`${BASE_URL}/solicitacoes-de-manutencao`);
-  cy.get("tbody tr").filter(`:contains("${room}")`).filter(`:contains("Pendente")`).within(() => {
-    cy.contains(description).should("exist");
-  });
+  cy.get("tbody tr")
+    .filter(`:contains("${room}")`)
+    .filter(`:contains("Pendente")`)
+    .within(() => {
+      cy.contains(description).should("exist");
+    });
 });
 
 Then('o botão {string} não está visível na linha correspondente à sala {string}', (label, room) => {

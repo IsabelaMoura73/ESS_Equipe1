@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import Navbar from "../../components/Navbar";
@@ -52,37 +52,45 @@ function Toast({ toast }) {
 function NovaSolicitacaoForm({ user, onCreated, onToast }) {
   const [rooms, setRooms] = useState([]);
   const [roomsError, setRoomsError] = useState(false);
-  const [form, setForm] = useState({ room: "", description: "" });
+  const [roomValue, setRoomValue] = useState("");
+  const [descLength, setDescLength] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const descRef = useRef(null);
 
   useEffect(() => {
     api.get("/api/rooms/?limit=100")
       .then(({ rooms }) => {
         setRooms(rooms);
-        if (rooms.length > 0) setForm((f) => ({ ...f, room: rooms[0].name }));
+        if (rooms.length > 0) setRoomValue(rooms[0].name);
       })
       .catch(() => setRoomsError(true));
   }, []);
 
-  function set(field) {
-    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+
+    const description = descRef.current ? descRef.current.value : "";
+
+    if (description.length > 500) {
+      setError("Descrição muito longa");
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post(
         `/api/maintenance/?teacher_cpf=${encodeURIComponent(user.cpf)}`,
-        { room: form.room, description: form.description }
+        { room: roomValue, description }
       );
-      setForm({ room: rooms.length > 0 ? rooms[0].name : "", description: "" });
+      if (descRef.current) descRef.current.value = "";
+      setDescLength(0);
       onCreated();
-      onToast("success", "Solicitação criada com sucesso! Aguardando avaliação do administrador.");
+      onToast("success", "Solicitação criada com sucesso");
     } catch (err) {
-      setError(err.message);
+      const msgErro = err.response?.data?.detail || err.message || "Erro ao criar solicitação";
+      setError(msgErro);
     } finally {
       setLoading(false);
     }
@@ -97,13 +105,13 @@ function NovaSolicitacaoForm({ user, onCreated, onToast }) {
           {roomsError ? (
             <input
               id="nova-room" style={s.input}
-              value={form.room} onChange={set("room")}
+              value={roomValue} onChange={(e) => setRoomValue(e.target.value)}
               placeholder="Ex: D005" required
             />
           ) : (
             <select
               id="nova-room" style={s.input}
-              value={form.room} onChange={set("room")} required
+              value={roomValue} onChange={(e) => setRoomValue(e.target.value)} required
             >
               {rooms.map((r) => (
                 <option key={r.name} value={r.name}>{r.name}</option>
@@ -119,10 +127,12 @@ function NovaSolicitacaoForm({ user, onCreated, onToast }) {
           <textarea
             id="nova-desc" style={s.textarea} rows={4}
             placeholder="Descreva o problema ou motivo da solicitação de manutenção..."
-            value={form.description} onChange={set("description")}
-            maxLength={500} required
+            ref={descRef}
+            onInput={(e) => setDescLength(e.target.value.length)}
+            onChange={(e) => setDescLength(e.target.value.length)}
+            required
           />
-          <span style={s.charCount}>{form.description.length}/500</span>
+          <span style={s.charCount}>{descLength}/500</span>
         </div>
 
         {error && <p style={s.error}>{error}</p>}
@@ -306,19 +316,21 @@ export default function ManutencoesDocente() {
 
   function handleEdited() {
     setEditando(null);
-    showToast("success", "Solicitação atualizada com sucesso!");
+    showToast("success", "Solicitação atualizada com sucesso");
     fetchSolicitacoes();
   }
 
   async function confirmDelete() {
     const sol = excluindo;
-    setExcluindo(null);
     try {
       await api.delete(`/api/maintenance/${sol.id}?teacher_cpf=${encodeURIComponent(user.cpf)}`);
-      showToast("success", "Solicitação excluída com sucesso.");
+      showToast("success", "Solicitação excluída com sucesso");
+      setExcluindo(null);
       fetchSolicitacoes();
     } catch (err) {
-      showToast("error", err.message);
+      const msgErro = err.response?.data?.detail || err.message;
+      showToast("error", msgErro);
+      setExcluindo(null);
     }
   }
 
